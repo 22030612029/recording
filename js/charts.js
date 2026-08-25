@@ -25,6 +25,12 @@ const TIER_META = [
   { key: "fail", label: "待提升(<60%)", color: PALETTE.fail },
 ];
 
+/* hex 颜色 → rgba（面积渐变用） */
+function hexToRgba(hex, a) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
 /* 基础主题样式注入到每个 option */
 function baseExtra() {
   return {
@@ -83,12 +89,23 @@ function renderTrend(domId) {
   const dates = [...new Set(papers.map((p) => p.date))].sort();
   const subjects = [...data.subjects];
 
+  // 目标线：各科目标百分比（来自激活目标院校），供 markLine 使用
+  const gap = store.targetGap();
+  const targetBySubject = {};
+  if (gap.target && gap.rows.length) {
+    gap.rows.forEach((r) => { targetBySubject[r.subject] = r.targetPct; });
+  }
+
   const series = subjects
     .map((subj, idx) => {
+      const color = PALETTE.series[idx % PALETTE.series.length];
       const pts = dates.map((d) => {
         const p = papers.find((x) => x.date === d && x.subject === subj);
-        return p ? store.scorePercent(p) : null;
+        if (!p) return null;
+        const pct = store.scorePercent(p);
+        return { value: pct, rawScore: store.num(p.score), rawTotal: store.num(p.totalScore, 100) };
       });
+      const targetPct = targetBySubject[subj];
       return {
         name: subj,
         type: "line",
@@ -96,8 +113,24 @@ function renderTrend(domId) {
         symbol: "circle",
         symbolSize: 7,
         connectNulls: true,
-        lineStyle: { width: 2.5 },
-        itemStyle: { color: PALETTE.series[idx % PALETTE.series.length] },
+        lineStyle: { width: 2.5, color },
+        itemStyle: { color },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: hexToRgba(color, 0.16) },
+            { offset: 1, color: hexToRgba(color, 0.02) },
+          ]),
+        },
+        markLine: targetPct != null ? {
+          silent: true,
+          symbol: "none",
+          lineStyle: { color: "#c89e3f", type: "dashed", width: 1.2 },
+          label: {
+            show: true, position: "insideEndTop",
+            color: "#a9822b", fontSize: 10, formatter: "目标 {c}%",
+          },
+          data: [{ yAxis: targetPct }],
+        } : undefined,
         data: pts,
       };
     })
@@ -120,8 +153,16 @@ function renderTrend(domId) {
       splitLine: { lineStyle: { color: "rgba(27,42,78,0.06)" } },
     },
     tooltip: { ...baseExtra().tooltip, trigger: "axis", formatter: (p) => {
-      let s = `${p[0].axisValue}<br/>`;
-      p.forEach((it) => { if (it.value != null) s += `${it.marker}${it.seriesName}：<b>${it.value}%</b><br/>`; });
+      let s = `<b>${p[0].axisValue}</b><br/>`;
+      p.forEach((it) => {
+        const v = it.value;
+        if (v == null) return;
+        if (typeof v === "object") {
+          s += `${it.marker}${it.seriesName}：<b>${v.value}%</b> <span style="color:#8a93a6;font-size:11px">（${v.rawScore}/${v.rawTotal} 分）</span><br/>`;
+        } else {
+          s += `${it.marker}${it.seriesName}：<b>${v}%</b><br/>`;
+        }
+      });
       return s;
     }},
     series,
@@ -147,9 +188,15 @@ function renderDistribution(domId) {
     series: [{
       type: "bar",
       barWidth: "48%",
-      itemStyle: { borderRadius: [6, 6, 0, 0] },
+      itemStyle: {
+        borderRadius: [6, 6, 0, 0],
+        color: (p) => new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: hexToRgba(TIER_META[p.dataIndex].color, 0.95) },
+          { offset: 1, color: hexToRgba(TIER_META[p.dataIndex].color, 0.55) },
+        ]),
+      },
       data: TIER_META.map((t) => ({ value: counts[t.key], itemStyle: { color: t.color } })),
-      label: { show: true, position: "top", color: "#3a4a6b", fontSize: 12, fontWeight: 600 },
+      label: { show: true, position: "top", color: "#3a4a6b", fontSize: 12, fontWeight: 600, formatter: "{c} 张" },
     }],
   });
 }
@@ -178,6 +225,7 @@ function renderRadar(domId) {
 
   inst.setOption({
     ...baseExtra(),
+    tooltip: { ...baseExtra().tooltip, trigger: "item", formatter: (p) => `${p.name}<br/>掌握度：<b style="color:#7a5a12">${p.value}%</b>` },
     radar: {
       indicator: indicators.length ? indicators : [{ name: "暂无", max: 100 }],
       radius: "64%",
@@ -206,10 +254,15 @@ function renderErrorType(domId) {
   if (!inst) return;
   const reasons = data.errorReasons;
   const counts = reasons.map((r) => data.errors.filter((e) => e.reason === r).length);
+  const total = counts.reduce((a, c) => a + c, 0);
 
   inst.setOption({
     ...baseExtra(),
-    tooltip: { ...baseExtra().tooltip, trigger: "axis", axisPointer: { type: "shadow" } },
+    tooltip: { ...baseExtra().tooltip, trigger: "axis", axisPointer: { type: "shadow" }, formatter: (ps) => {
+      const c = ps[0].value;
+      const pct = total ? Math.round((c / total) * 100) : 0;
+      return `${ps[0].marker}<b>${ps[0].name}</b><br/>${c} 题 · 占错题总数 <b>${pct}%</b>`;
+    } },
     grid: { left: 90, right: 20, top: 16, bottom: 24 },
     xAxis: { type: "value", minInterval: 1, axisLabel: { color: "#8a93a6", fontSize: 11 }, splitLine: { lineStyle: { color: "rgba(27,42,78,0.06)" } } },
     yAxis: { type: "category", data: reasons, axisLine: { lineStyle: { color: "#d6cbb3" } }, axisLabel: { color: "#5b6a86", fontSize: 11 }, axisTick: { show: false } },
@@ -222,7 +275,10 @@ function renderErrorType(domId) {
           { offset: 0, color: "#1b2a4e" }, { offset: 1, color: "#b8860b" },
         ]),
       },
-      label: { show: true, position: "right", color: "#3a4a6b", fontSize: 11, fontWeight: 600 },
+      label: {
+        show: true, position: "right", color: "#3a4a6b", fontSize: 11, fontWeight: 600,
+        formatter: (p) => `${p.value} 题${total ? ` · ${Math.round((p.value / total) * 100)}%` : ""}`,
+      },
       data: counts,
     }],
   });
@@ -348,12 +404,6 @@ function renderTargetGap(domId) {
           borderWidth: 1, borderRadius: 6, padding: [4, 7], distance: 4,
           formatter: labelTgt,
         },
-        markLine: {
-          silent: true, symbol: ["none", "none"],
-          lineStyle: { color: "#c89e3f", type: "dashed", width: 1 },
-          label: { show: false },
-          data: [{ yAxis: null }],
-        },
       },
       // 未做卷标记：散点，在 0 基线处放一颗灰圆点，便于识别"这科还没开始"
       {
@@ -405,25 +455,25 @@ export function renderCharts(container) {
 
     <div class="chart-grid" style="${showGap ? "margin-top:16px" : ""}">
       <div class="card chart-card">
-        <div class="card-title">成绩趋势</div>
+        <div class="card-title">📈 成绩趋势 <span class="count">各科得分率变化 · 金色虚线为目标线</span></div>
         ${hasPapers
           ? `<div id="chart-trend" class="chart-box tall"></div>`
           : `<div class="chart-empty">暂无试卷数据，去「刷题记录」录入吧</div>`}
       </div>
       <div class="card chart-card">
-        <div class="card-title">分数分布</div>
+        <div class="card-title">📊 分数分布 <span class="count">按得分率分档</span></div>
         ${hasPapers
           ? `<div id="chart-dist" class="chart-box"></div>`
           : `<div class="chart-empty">暂无试卷数据</div>`}
       </div>
       <div class="card chart-card">
-        <div class="card-title">知识点掌握雷达</div>
+        <div class="card-title">🕸️ 知识点掌握雷达 <span class="count">各科掌握度（知识点平均，无知识点则用卷面分）</span></div>
         ${(hasKnowledge || hasPapers)
           ? `<div id="chart-radar" class="chart-box"></div>`
           : `<div class="chart-empty">暂无知识点数据</div>`}
       </div>
       <div class="card chart-card">
-        <div class="card-title">错题类型分布</div>
+        <div class="card-title">📋 错题类型分布 <span class="count">按错因统计</span></div>
         ${hasErrors
           ? `<div id="chart-err" class="chart-box"></div>`
           : `<div class="chart-empty">暂无错题数据，去「错题与知识点」记录</div>`}
@@ -435,14 +485,16 @@ export function renderCharts(container) {
   const addT = container.querySelector("#analysisAddTarget");
   if (addT) addT.onclick = () => document.dispatchEvent(new CustomEvent("analysis:addTarget"));
 
-  // 下一帧渲染（确保 dom 尺寸就绪）
-  requestAnimationFrame(() => {
-    if (showGap) renderTargetGap("chart-gap");
-    if (hasPapers) renderTrend("chart-trend");
-    if (hasPapers) renderDistribution("chart-dist");
-    if (hasKnowledge || hasPapers) renderRadar("chart-radar");
-    if (hasErrors) renderErrorType("chart-err");
-  });
+  // 下一帧渲染（确保 dom 尺寸就绪）；用 setTimeout 而非 rAF，避免后台/低功耗下 rAF 不触发
+  // 单个图表失败不影响其他图表
+  setTimeout(() => {
+    const safe = (fn, name) => { try { fn(); } catch (e) { console.error("[chart]", name, e); } };
+    if (showGap) safe(() => renderTargetGap("chart-gap"), "gap");
+    if (hasPapers) safe(() => renderTrend("chart-trend"), "trend");
+    if (hasPapers) safe(() => renderDistribution("chart-dist"), "dist");
+    if (hasKnowledge || hasPapers) safe(() => renderRadar("chart-radar"), "radar");
+    if (hasErrors) safe(() => renderErrorType("chart-err"), "err");
+  }, 30);
 }
 
 /* 差距分析的"需要重点提升"面板（图表下） */

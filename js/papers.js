@@ -224,6 +224,21 @@ export function openPaperForm(paper = null) {
       ["#pf_score", "#pf_total"].forEach((sel) => root.querySelector(sel).addEventListener("input", preview));
       preview();
 
+      // 满分随科目联动：数学/408 自动 150，政治/英语 自动 100
+      const totalInput = root.querySelector("#pf_total");
+      const subjectSel = root.querySelector("#pf_subject");
+      const defaultTotalFor = (s) =>
+        (s === "数学" || s === "408") ? 150 : (s === "政治" || s === "英语" ? 100 : null);
+      if (!isEdit) {
+        const dt = defaultTotalFor(subjectSel.value);
+        if (dt != null) totalInput.value = dt;
+      }
+      subjectSel.addEventListener("change", () => {
+        const dt = defaultTotalFor(subjectSel.value);
+        if (dt != null) totalInput.value = dt;
+        preview();
+      });
+
       root.querySelector("#pf_cancel").onclick = () => closeModal();
       root.querySelector("#pf_save").onclick = () => {
         const name = root.querySelector("#pf_name").value.trim();
