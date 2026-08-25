@@ -31,11 +31,17 @@ function randomSalt() {
 
 const ID_RE = /^[a-zA-Z0-9_]{3,20}$/;
 
+/* 密码规则：至少 6 位，仅允许英文字母、数字与常见符号（任选组合，不含中文等字符） */
+function validPassword(p) {
+  if (!p || p.length < 6) return false;
+  return /^[A-Za-z0-9!@#$%^&*()_+\-=\[\]{}|;:'",.<>?/~`\\]+$/.test(p);
+}
+
 /* ---------- 注册 ---------- */
 export async function register(id, password) {
   id = (id || "").trim();
   if (!ID_RE.test(id)) return { ok: false, msg: "ID 需为 3-20 位字母、数字或下划线" };
-  if (!password || password.length < 6) return { ok: false, msg: "密码至少 6 位" };
+  if (!validPassword(password)) return { ok: false, msg: "密码需至少 6 位，且仅含英文字母、数字与符号" };
   const users = readUsers();
   if (users.some((u) => u.id === id)) return { ok: false, msg: "该 ID 已被注册" };
 
