@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="面向 2027 考研备考的个人学习管理应用：刷题记录、错题与知识点、可视化与学情分析。" />
+  <meta name="theme-color" content="#1B2A4E" />
+  <title>砚 · 考研学习管理台</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Noto+Serif+SC:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- ECharts -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- 纸纹背景层 -->
+  <div class="paper-grain" aria-hidden="true"></div>
+
+  <div class="app-shell">
+    <!-- ===== 侧边导航 ===== -->
+    <aside class="sidebar" id="sidebar" aria-label="主导航">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">砚</span>
+        <div class="brand-text">
+          <span class="brand-name">砚台</span>
+          <span class="brand-sub">2027 考研 · 学习管理</span>
+        </div>
+      </div>
+
+      <nav class="nav-list" id="navList">
+        <button class="nav-item active" data-view="dashboard" type="button">
+          <span class="nav-ico" aria-hidden="true">⌂</span>
+          <span class="nav-label">仪表盘</span>
+        </button>
+        <button class="nav-item" data-view="papers" type="button">
+          <span class="nav-ico" aria-hidden="true">▤</span>
+          <span class="nav-label">刷题记录</span>
+        </button>
+        <button class="nav-item" data-view="knowledge" type="button">
+          <span class="nav-ico" aria-hidden="true">✎</span>
+          <span class="nav-label">错题与知识点</span>
+        </button>
+        <button class="nav-item" data-view="analysis" type="button">
+          <span class="nav-ico" aria-hidden="true">◈</span>
+          <span class="nav-label">学情分析</span>
+        </button>
+        <button class="nav-item" data-view="settings" type="button">
+          <span class="nav-ico" aria-hidden="true">⚙</span>
+          <span class="nav-label">数据与设置</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <span class="dot" id="storageDot" aria-hidden="true"></span>
+        <span class="storage-meta" id="storageMeta">本地存储</span>
+      </div>
+    </aside>
+
+    <!-- ===== 主内容 ===== -->
+    <div class="main-wrap">
+      <header class="topbar">
+        <button class="icon-btn menu-toggle" id="menuToggle" type="button" aria-label="切换菜单">
+          <span aria-hidden="true">☰</span>
+        </button>
+        <h1 class="topbar-title" id="viewTitle">仪表盘</h1>
+        <div class="topbar-actions">
+          <button class="btn btn-primary" id="quickAddBtn" type="button">+ 录入试卷</button>
+        </div>
+      </header>
+
+      <main class="content" id="content">
+        <!-- 仪表盘 -->
+        <section class="view active" id="view-dashboard" aria-labelledby="viewTitle"></section>
+        <!-- 刷题记录 -->
+        <section class="view" id="view-papers" aria-labelledby="viewTitle" hidden></section>
+        <!-- 错题与知识点 -->
+        <section class="view" id="view-knowledge" aria-labelledby="viewTitle" hidden></section>
+        <!-- 学情分析 -->
+        <section class="view" id="view-analysis" aria-labelledby="viewTitle" hidden></section>
+        <!-- 数据与设置 -->
+        <section class="view" id="view-settings" aria-labelledby="viewTitle" hidden></section>
+      </main>
+
+      <footer class="footer">
+        <span>砚台 · 本地学习管理</span>
+        <span class="footer-sep" aria-hidden="true">·</span>
+        <span>数据存于本机浏览器，请定期导出备份</span>
+      </footer>
+    </div>
+  </div>
+
+  <!-- 底部 Tab（移动端） -->
+  <nav class="bottom-tabs" id="bottomTabs" aria-label="底部导航">
+    <button class="tab-item active" data-view="dashboard" type="button"><span aria-hidden="true">⌂</span><span>仪表</span></button>
+    <button class="tab-item" data-view="papers" type="button"><span aria-hidden="true">▤</span><span>刷题</span></button>
+    <button class="tab-item" data-view="knowledge" type="button"><span aria-hidden="true">✎</span><span>错题</span></button>
+    <button class="tab-item" data-view="analysis" type="button"><span aria-hidden="true">◈</span><span>分析</span></button>
+    <button class="tab-item" data-view="settings" type="button"><span aria-hidden="true">⚙</span><span>设置</span></button>
+  </nav>
+
+  <!-- 通用模态层 -->
+  <div class="modal-mask" id="modalMask" hidden>
+    <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-head">
+        <h2 class="modal-title" id="modalTitle">标题</h2>
+        <button class="icon-btn" id="modalClose" type="button" aria-label="关闭">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-foot" id="modalFoot"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- 隐藏的文件导入 -->
+  <input type="file" id="importFile" accept="application/json,.json" hidden />
+  <!-- 隐藏的图片选择（错题 / 知识点上传） -->
+  <input type="file" id="imageInput" accept="image/*" hidden />
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# 工具/编辑器配置
+.pai/
+.trae/
+.idea/
+.vscode/
+*.log
+
+# 小程序（已弃用，保留目录占位忽略）
+miniapp/
+
+# 系统文件
+Thumbs.db
+.DS_Store
