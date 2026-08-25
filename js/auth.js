@@ -29,7 +29,11 @@ function randomSalt() {
   return Array.from(a).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-const ID_RE = /^[a-zA-Z0-9_]{3,20}$/;
+/* ID 规则：1-20 位任意字符（中文/英文/数字/符号均可），仅排除会破坏存储的控制字符 */
+function validId(id) {
+  if (!id || id.length < 1 || id.length > 20) return false;
+  return !/[\u0000-\u001F\u007F]/.test(id); // 排除控制字符
+}
 
 /* 密码规则：至少 6 位，仅允许英文字母、数字与常见符号（任选组合，不含中文等字符） */
 function validPassword(p) {
@@ -40,7 +44,7 @@ function validPassword(p) {
 /* ---------- 注册 ---------- */
 export async function register(id, password) {
   id = (id || "").trim();
-  if (!ID_RE.test(id)) return { ok: false, msg: "ID 需为 3-20 位字母、数字或下划线" };
+  if (!validId(id)) return { ok: false, msg: "ID 需为 1-20 位任意字符" };
   if (!validPassword(password)) return { ok: false, msg: "密码需至少 6 位，且仅含英文字母、数字与符号" };
   const users = readUsers();
   if (users.some((u) => u.id === id)) return { ok: false, msg: "该 ID 已被注册" };

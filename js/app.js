@@ -614,7 +614,7 @@ function setupAuth() {
     document.getElementById("authPass2Wrap").hidden = m !== "register";
     document.getElementById("authSubmit").textContent = m === "register" ? "注 册" : "登 录";
     document.getElementById("authTip").textContent = m === "register"
-      ? "密码由英文字母、数字与符号任选组成（至少 6 位）。注册后你的数据将独立存放。"
+      ? "ID 任意字符（1-20 位）；密码由英文字母、数字与符号任选（至少 6 位）。"
       : "数据按账号独立保存于本机浏览器，请牢记你的 ID 与密码。";
   };
   tabs.forEach((b) => (b.onclick = () => setMode(b.dataset.amode)));
