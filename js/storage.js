@@ -1,9 +1,16 @@
 /* ============================================================
- * storage.js — 数据层（localStorage 单一数据源）
+ * storage.js — 数据层（localStorage 单一数据源，按登录用户隔离）
  * 提供 schema、CRUD、导入/导出、示例数据、分数区间、事件订阅
  * ============================================================ */
+import { getSessionUserId, userKey } from "./auth.js";
 
-const STORAGE_KEY = "kaoyan_study_data";
+const LEGACY_KEY = "kaoyan_study_data";
+
+/* 当前登录用户的数据 key（未登录返回 null，仅读默认数据不落库） */
+export function dataKey() {
+  const uid = getSessionUserId();
+  return uid ? userKey(uid) : null;
+}
 
 /* 默认 schema */
 function defaultData() {
@@ -37,8 +44,9 @@ const _listeners = new Set();
 
 /* ---------- 读取/保存 ---------- */
 export function load() {
+  const key = dataKey();
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = key ? localStorage.getItem(key) : null;
     if (!raw) {
       _data = defaultData();
     } else {
@@ -84,8 +92,10 @@ export function load() {
 }
 
 export function save() {
+  const key = dataKey();
+  if (!key) return false; // 未登录不写库
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(_data));
+    localStorage.setItem(key, JSON.stringify(_data));
     emit();
     return true;
   } catch (e) {

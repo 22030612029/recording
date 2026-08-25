@@ -2,6 +2,7 @@
  * app.js — 入口：导航、模态、Toast、仪表盘、设置、渲染编排
  * ============================================================ */
 import * as store from "./storage.js";
+import * as auth from "./auth.js";
 import { renderPapers, openPaperForm } from "./papers.js";
 import { renderKnowledge } from "./knowledge.js";
 import { renderAnalysis } from "./analysis.js";
@@ -307,6 +308,7 @@ function renderSettings(container) {
   const usage = estimateUsage();
   const targets = store.listTargets();
   const activeId = data.activeTargetId;
+  const user = auth.currentUser();
 
   container.innerHTML = `
     <div class="section-head"><div><h2>数据与设置</h2><div class="hint">全部数据存于本机浏览器</div></div></div>
@@ -367,6 +369,17 @@ function renderSettings(container) {
       <p class="muted" style="font-size:12px;margin-top:10px">导出的 JSON 可保存到云盘或换设备迁移；导入会覆盖当前数据。</p>
     </div>
 
+    <div class="card" style="margin-top:16px;border-top:3px solid var(--accent)">
+      <div class="card-title">当前账号</div>
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
+        <div>
+          <div style="font-size:15px;font-weight:600;font-family:var(--ff-mono)">${user ? esc(user.id) : "—"}</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">${user ? `注册于 ${new Date(user.createdAt).toLocaleDateString("zh-CN")}` : "未登录"}</div>
+        </div>
+        <button class="btn btn-ghost" id="accountLogout" type="button">退出登录</button>
+      </div>
+    </div>
+
     <div class="card" style="margin-top:16px;border-top:3px solid var(--ink)">
       <div class="card-title">关于砚台</div>
       <p style="font-size:13.5px;color:var(--ink-2);line-height:1.7">面向 2027 考研备考的本地学习管理台：目标院校与差距分析、刷题记录、错题与知识点、可视化与学情报告。纯静态、无后端，数据不离本机。</p>
@@ -421,6 +434,10 @@ function renderSettings(container) {
     const ok = await confirmBox("清空数据", "此操作不可恢复，将删除全部试卷、错题、知识点与目标院校。确认清空？");
     if (ok) { store.clearAll(); toast("已清空", "ok"); }
   };
+
+  // 退出登录
+  const accLogout = container.querySelector("#accountLogout");
+  if (accLogout) accLogout.onclick = doLogout;
 }
 
 /* 目标院校卡片（设置页） */
@@ -525,7 +542,8 @@ export function openTargetForm(target = null) {
 
 function estimateUsage() {
   try {
-    const raw = localStorage.getItem("kaoyan_study_data") || "";
+    const key = store.dataKey();
+    const raw = key ? localStorage.getItem(key) || "" : "";
     const bytes = new Blob([raw]).size;
     if (bytes < 1024) return bytes + " B";
     return (bytes / 1024).toFixed(1) + " KB";
@@ -548,6 +566,92 @@ function setupSidebar() {
   document.addEventListener("click", (e) => {
     if (sidebar.classList.contains("open") && !sidebar.contains(e.target) && e.target !== toggle) close();
   });
+}
+
+/* ---------- 认证：登录 / 注册 / 登出 ---------- */
+function updateUserChip(user) {
+  const chip = document.getElementById("userChip");
+  const meta = document.getElementById("storageMeta");
+  if (chip) chip.hidden = !user;
+  if (meta) meta.textContent = user ? `${user.id} · 本地存储` : "本地存储";
+}
+
+function doLogout() {
+  auth.logout();
+  document.getElementById("appShell").hidden = true;
+  document.getElementById("authScreen").hidden = false;
+  const pass = document.getElementById("authPass");
+  const pass2 = document.getElementById("authPass2");
+  if (pass) pass.value = "";
+  if (pass2) pass2.value = "";
+  document.querySelectorAll(".auth-tab").forEach((b) => {
+    b.classList.toggle("active", b.dataset.amode === "login");
+  });
+  document.getElementById("authPass2Wrap").hidden = true;
+  document.getElementById("authSubmit").textContent = "登 录";
+  document.getElementById("authTip").textContent = "数据按账号独立保存于本机浏览器，请牢记你的 ID 与密码。";
+  updateUserChip(null);
+  toast("已退出登录", "ok");
+}
+
+function enterApp(user) {
+  document.getElementById("authScreen").hidden = true;
+  document.getElementById("appShell").hidden = false;
+  updateUserChip(user);
+  store.load();
+  switchView("dashboard");
+}
+
+function setupAuth() {
+  const screen = document.getElementById("authScreen");
+  const form = document.getElementById("authForm");
+  const tabs = document.querySelectorAll(".auth-tab");
+  let mode = "login";
+
+  const setMode = (m) => {
+    mode = m;
+    tabs.forEach((b) => b.classList.toggle("active", b.dataset.amode === m));
+    document.getElementById("authPass2Wrap").hidden = m !== "register";
+    document.getElementById("authSubmit").textContent = m === "register" ? "注 册" : "登 录";
+    document.getElementById("authTip").textContent = m === "register"
+      ? "注册后你的数据将独立存放，与其他人互不干扰。"
+      : "数据按账号独立保存于本机浏览器，请牢记你的 ID 与密码。";
+  };
+  tabs.forEach((b) => (b.onclick = () => setMode(b.dataset.amode)));
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const id = document.getElementById("authId").value.trim();
+    const pass = document.getElementById("authPass").value;
+    if (!id) { toast("请输入用户 ID", "err"); return; }
+    if (!pass) { toast("请输入密码", "err"); return; }
+    if (mode === "register") {
+      const pass2 = document.getElementById("authPass2").value;
+      if (pass !== pass2) { toast("两次输入的密码不一致", "err"); return; }
+      const r = await auth.register(id, pass);
+      if (!r.ok) { toast(r.msg, "err"); return; }
+      toast("注册成功，欢迎使用砚台", "ok");
+      enterApp(r.user);
+    } else {
+      const r = await auth.login(id, pass);
+      if (!r.ok) { toast(r.msg, "err"); return; }
+      toast("登录成功", "ok");
+      enterApp(r.user);
+    }
+  };
+
+  document.getElementById("logoutBtn").onclick = doLogout;
+
+  // 启动判定
+  const user = auth.currentUser();
+  if (user) {
+    screen.hidden = true;
+    enterApp(user);
+  } else {
+    screen.hidden = false;
+    document.getElementById("appShell").hidden = true;
+    updateUserChip(null);
+  }
 }
 
 /* ---------- 初始化 ---------- */
@@ -587,7 +691,8 @@ function init() {
   // 分析页的"设定目标院校"按钮通过事件桥接（避免 charts↔app 循环 import）
   document.addEventListener("analysis:addTarget", () => openTargetForm());
 
-  switchView("dashboard");
+  // 认证启动：已登录 → 进入应用；未登录 → 显示登录界面
+  setupAuth();
 }
 
 if (document.readyState === "loading") {

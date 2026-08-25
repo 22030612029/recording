@@ -26,7 +26,46 @@
   <!-- 纸纹背景层 -->
   <div class="paper-grain" aria-hidden="true"></div>
 
-  <div class="app-shell">
+  <!-- ===== 登录 / 注册界面 ===== -->
+  <div class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <span class="auth-mark" aria-hidden="true">砚</span>
+        <div class="auth-brand-text">
+          <span class="auth-name">砚台</span>
+          <span class="auth-sub">2027 考研 · 学习管理</span>
+        </div>
+      </div>
+
+      <div class="auth-tabs" role="tablist">
+        <button class="auth-tab active" data-amode="login" type="button" role="tab">登 录</button>
+        <button class="auth-tab" data-amode="register" type="button" role="tab">注 册</button>
+      </div>
+
+      <form id="authForm" novalidate>
+        <div class="field">
+          <label for="authId">用户 ID</label>
+          <input class="input" id="authId" autocomplete="username" maxlength="20"
+                 placeholder="3-20 位字母、数字或下划线" />
+        </div>
+        <div class="field">
+          <label for="authPass">密码</label>
+          <input class="input" id="authPass" type="password" autocomplete="current-password"
+                 placeholder="至少 6 位" />
+        </div>
+        <div class="field" id="authPass2Wrap" hidden>
+          <label for="authPass2">确认密码</label>
+          <input class="input" id="authPass2" type="password" autocomplete="new-password"
+                 placeholder="再次输入密码" />
+        </div>
+        <button class="btn btn-primary auth-submit" id="authSubmit" type="submit">登 录</button>
+      </form>
+
+      <p class="auth-tip" id="authTip">数据按账号独立保存于本机浏览器，请牢记你的 ID 与密码。</p>
+    </div>
+  </div>
+
+  <div class="app-shell" id="appShell" hidden>
     <!-- ===== 侧边导航 ===== -->
     <aside class="sidebar" id="sidebar" aria-label="主导航">
       <div class="brand">
@@ -61,8 +100,11 @@
       </nav>
 
       <div class="sidebar-foot">
-        <span class="dot" id="storageDot" aria-hidden="true"></span>
-        <span class="storage-meta" id="storageMeta">本地存储</span>
+        <div class="user-chip" id="userChip" hidden>
+          <span class="dot" id="storageDot" aria-hidden="true"></span>
+          <span class="storage-meta" id="storageMeta">本地存储</span>
+          <button class="btn-ghost user-logout" id="logoutBtn" type="button" title="退出登录">退出</button>
+        </div>
       </div>
     </aside>
 
