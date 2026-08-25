@@ -62,7 +62,17 @@ export async function register(id, password) {
   }
 
   localStorage.setItem(SESSION_KEY, id);
+  rememberId(id);
   return { ok: true, user: { id, createdAt: user.createdAt } };
+}
+
+/* ---------- 记住上次登录 ID（仅前端提示便利，不保存密码） ---------- */
+const LAST_ID_KEY = "kaoyan_last_id";
+function rememberId(id) {
+  try { localStorage.setItem(LAST_ID_KEY, id); } catch (e) {}
+}
+export function lastId() {
+  try { return localStorage.getItem(LAST_ID_KEY) || ""; } catch (e) { return ""; }
 }
 
 /* ---------- 登录 ---------- */
@@ -73,7 +83,23 @@ export async function login(id, password) {
   const hash = await sha256Hex(user.salt + "::" + password);
   if (hash !== user.hash) return { ok: false, msg: "密码错误" };
   localStorage.setItem(SESSION_KEY, id);
+  rememberId(id);
   return { ok: true, user: { id, createdAt: user.createdAt } };
+}
+
+/* ---------- 修改密码 ---------- */
+export async function changePassword(id, oldPass, newPass) {
+  const users = readUsers();
+  const user = users.find((u) => u.id === id);
+  if (!user) return { ok: false, msg: "用户不存在" };
+  const oldHash = await sha256Hex(user.salt + "::" + oldPass);
+  if (oldHash !== user.hash) return { ok: false, msg: "原密码错误" };
+  if (!validPassword(newPass)) return { ok: false, msg: "新密码需至少 6 位，且仅含英文字母、数字与符号" };
+  const salt = randomSalt();
+  user.salt = salt;
+  user.hash = await sha256Hex(salt + "::" + newPass);
+  writeUsers(users);
+  return { ok: true, msg: "密码已修改" };
 }
 
 /* ---------- 登出 / 会话 ---------- */

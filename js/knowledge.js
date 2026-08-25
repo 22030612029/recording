@@ -6,7 +6,14 @@ import { openModal, closeModal, toast, esc, confirmBox } from "./app.js";
 import * as store from "./storage.js";
 
 let activeSub = "errors";
-let filter = { q: "", subject: "", module: "", reason: "", type: "" };
+let filter = { q: "", subject: "", module: "", reason: "", type: "", kSort: "new" };
+let qTimer = null;
+
+/* 账号切换时重置筛选（由 app.js 在进入应用时调用） */
+export function resetKnowledgeFilter() {
+  activeSub = "errors";
+  filter = { q: "", subject: "", module: "", reason: "", type: "", kSort: "new" };
+}
 
 export function renderKnowledge(container) {
   const data = store.getData();
@@ -47,6 +54,11 @@ export function renderKnowledge(container) {
           : `<select class="select filter" id="kType">
               <option value="">全部类型</option>
               ${data.kpTypes.map((t) => `<option ${filter.type === t ? "selected" : ""}>${t}</option>`).join("")}
+            </select>
+            <select class="select filter" id="kSort">
+              <option value="new" ${filter.kSort === "new" ? "selected" : ""}>最近添加</option>
+              <option value="mastery-asc" ${filter.kSort === "mastery-asc" ? "selected" : ""}>掌握度从低</option>
+              <option value="mastery-desc" ${filter.kSort === "mastery-desc" ? "selected" : ""}>掌握度从高</option>
             </select>`}
       </div>
       <div class="search"><input class="input" id="kQ" type="search" placeholder="搜索内容" value="${esc(filter.q)}" /></div>
@@ -66,7 +78,11 @@ export function renderKnowledge(container) {
   container.querySelector("#kAdd").onclick = () =>
     activeSub === "errors" ? openErrorForm() : openKnowledgeForm();
   const q = container.querySelector("#kQ");
-  q.oninput = (e) => { filter.q = e.target.value; rerender(container); };
+  q.oninput = (e) => {
+    filter.q = e.target.value;
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => rerender(container), 250); // 防抖
+  };
   const sSel = container.querySelector("#kSubject");
   sSel.onchange = (e) => { filter.subject = e.target.value; rerender(container); };
   const mSel = container.querySelector("#kModule");
@@ -75,6 +91,8 @@ export function renderKnowledge(container) {
   if (reasonSel) reasonSel.onchange = (e) => { filter.reason = e.target.value; rerender(container); };
   const typeSel = container.querySelector("#kType");
   if (typeSel) typeSel.onchange = (e) => { filter.type = e.target.value; rerender(container); };
+  const kSortSel = container.querySelector("#kSort");
+  if (kSortSel) kSortSel.onchange = (e) => { filter.kSort = e.target.value; rerender(container); };
 
   rerender(container);
 }
@@ -160,7 +178,10 @@ function renderKnowledgeList(data, wrap) {
       if (!String(k.content).toLowerCase().includes(q) && !String(k.module).toLowerCase().includes(q)) return false;
     }
     return true;
-  }).sort((a, b) => (b.createdAt - a.createdAt));
+  });
+  if (filter.kSort === "mastery-asc") list.sort((a, b) => store.num(a.mastery) - store.num(b.mastery));
+  else if (filter.kSort === "mastery-desc") list.sort((a, b) => store.num(b.mastery) - store.num(a.mastery));
+  else list.sort((a, b) => (b.createdAt - a.createdAt));
 
   if (!list.length) {
     wrap.innerHTML = emptyHTML("知识点", "尚未记录知识点", "先录入试卷，再记录对应的关键/薄弱/复习建议，系统会自动关联到试卷。");

@@ -3,8 +3,8 @@
  * ============================================================ */
 import * as store from "./storage.js";
 import * as auth from "./auth.js";
-import { renderPapers, openPaperForm } from "./papers.js";
-import { renderKnowledge } from "./knowledge.js";
+import { renderPapers, openPaperForm, resetPapersFilter } from "./papers.js";
+import { renderKnowledge, resetKnowledgeFilter } from "./knowledge.js";
 import { renderAnalysis } from "./analysis.js";
 import { renderMiniTrend, resizeAll } from "./charts.js";
 
@@ -306,6 +306,7 @@ function greeting() {
 function renderSettings(container) {
   const data = store.getData();
   const usage = estimateUsage();
+  const storeStat = store.storageUsage();
   const targets = store.listTargets();
   const activeId = data.activeTargetId;
   const user = auth.currentUser();
@@ -341,9 +342,13 @@ function renderSettings(container) {
       </div>
       <div class="card">
         <div class="card-title">存储状态</div>
-        <div class="stat-sub" style="margin-bottom:6px">本地占用约 <span class="score-num">${usage}</span></div>
+        <div class="stat-sub" style="margin-bottom:6px">本地占用约 <span class="score-num">${usage}</span>（约 ${storeStat.pct}% / 5MB）</div>
         <div class="stat-sub">试卷 ${data.papers.length} · 错题 ${data.errors.length} · 知识点 ${data.knowledge.length} · 目标院校 ${targets.length}</div>
-        <div class="stat-sub" style="margin-top:8px;color:var(--ink-mute)">数据仅存于本浏览器，清缓存将丢失，请定期导出备份。</div>
+        ${storeStat.pct > 85
+          ? `<div class="stat-sub" style="margin-top:8px;color:var(--danger);font-weight:600">⚠ 存储已用 ${storeStat.pct}%，建议立即导出备份并清理多余的错题/知识点图片，避免保存失败。</div>`
+          : storeStat.pct > 60
+            ? `<div class="stat-sub" style="margin-top:8px;color:#a06a00">存储占用已达 ${storeStat.pct}%，上传图片较多时请注意，建议定期导出备份。</div>`
+            : `<div class="stat-sub" style="margin-top:8px;color:var(--ink-mute)">数据仅存于本浏览器，清缓存将丢失，请定期导出备份。</div>`}
       </div>
     </div>
 
@@ -376,6 +381,7 @@ function renderSettings(container) {
           <div style="font-size:15px;font-weight:600;font-family:var(--ff-mono)">${user ? esc(user.id) : "—"}</div>
           <div class="muted" style="font-size:12px;margin-top:2px">${user ? `注册于 ${new Date(user.createdAt).toLocaleDateString("zh-CN")}` : "未登录"}</div>
         </div>
+        <button class="btn btn-ghost" id="accountChangePw" type="button">修改密码</button>
         <button class="btn btn-ghost" id="accountLogout" type="button">退出登录</button>
       </div>
     </div>
@@ -438,6 +444,54 @@ function renderSettings(container) {
   // 退出登录
   const accLogout = container.querySelector("#accountLogout");
   if (accLogout) accLogout.onclick = doLogout;
+
+  // 修改密码
+  const accChangePw = container.querySelector("#accountChangePw");
+  if (accChangePw) accChangePw.onclick = openChangePassword;
+}
+
+/* 修改密码模态 */
+function openChangePassword() {
+  const user = auth.currentUser();
+  if (!user) { toast("请先登录", "err"); return; }
+  openModal({
+    title: "修改密码",
+    body: `
+      <div class="form-grid">
+        <div class="field span-2">
+          <label>用户 ID</label>
+          <input class="input" id="cpw_id" value="${esc(user.id)}" disabled />
+        </div>
+        <div class="field span-2">
+          <label>原密码<span class="req">*</span></label>
+          <input class="input" id="cpw_old" type="password" autocomplete="current-password" placeholder="输入当前密码" />
+        </div>
+        <div class="field span-2">
+          <label>新密码<span class="req">*</span></label>
+          <input class="input" id="cpw_new" type="password" autocomplete="new-password" placeholder="6 位以上，英文/数字/符号任选" />
+        </div>
+        <div class="field span-2">
+          <label>确认新密码<span class="req">*</span></label>
+          <input class="input" id="cpw_new2" type="password" autocomplete="new-password" placeholder="再次输入新密码" />
+        </div>
+      </div>
+    `,
+    footer: `<button class="btn btn-ghost" id="cpw_cancel">取消</button><button class="btn btn-primary" id="cpw_save">保存新密码</button>`,
+    onMount: (root) => {
+      root.querySelector("#cpw_cancel").onclick = () => closeModal();
+      root.querySelector("#cpw_save").onclick = async () => {
+        const oldP = root.querySelector("#cpw_old").value;
+        const newP = root.querySelector("#cpw_new").value;
+        const new2 = root.querySelector("#cpw_new2").value;
+        if (!oldP || !newP) { toast("请填写原密码与新密码", "err"); return; }
+        if (newP !== new2) { toast("两次输入的新密码不一致", "err"); return; }
+        const r = await auth.changePassword(user.id, oldP, newP);
+        if (!r.ok) { toast(r.msg, "err"); return; }
+        toast(r.msg, "ok");
+        closeModal();
+      };
+    },
+  });
 }
 
 /* 目标院校卡片（设置页） */
@@ -598,6 +652,9 @@ function enterApp(user) {
   document.getElementById("authScreen").hidden = true;
   document.getElementById("appShell").hidden = false;
   updateUserChip(user);
+  // 账号切换时重置各模块筛选，避免上一账号的条件残留
+  resetPapersFilter();
+  resetKnowledgeFilter();
   store.load();
   switchView("dashboard");
 }
@@ -607,6 +664,10 @@ function setupAuth() {
   const form = document.getElementById("authForm");
   const tabs = document.querySelectorAll(".auth-tab");
   let mode = "login";
+
+  // 记住上次登录 ID（仅便利输入，不存密码）
+  const idInput = document.getElementById("authId");
+  if (idInput && !idInput.value) idInput.value = auth.lastId() || "";
 
   const setMode = (m) => {
     mode = m;

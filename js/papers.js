@@ -6,6 +6,12 @@ import { openModal, closeModal, toast, esc, confirmBox } from "./app.js";
 import * as store from "./storage.js";
 
 let filterState = { subject: "", type: "", sort: "date-desc", q: "" };
+let qTimer = null;
+
+/* 账号切换时重置筛选（由 app.js 在进入应用时调用） */
+export function resetPapersFilter() {
+  filterState = { subject: "", type: "", sort: "date-desc", q: "" };
+}
 
 export function renderPapers(container) {
   const data = store.getData();
@@ -46,7 +52,11 @@ export function renderPapers(container) {
   container.querySelector("#fSubject").onchange = (e) => { filterState.subject = e.target.value; rerenderList(container); };
   container.querySelector("#fType").onchange = (e) => { filterState.type = e.target.value; rerenderList(container); };
   container.querySelector("#fSort").onchange = (e) => { filterState.sort = e.target.value; rerenderList(container); };
-  container.querySelector("#fQ").oninput = (e) => { filterState.q = e.target.value; rerenderList(container); };
+  container.querySelector("#fQ").oninput = (e) => {
+    filterState.q = e.target.value;
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => rerenderList(container), 250); // 防抖
+  };
 
   rerenderList(container);
 }

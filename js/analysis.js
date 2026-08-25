@@ -98,7 +98,7 @@ function computeReport() {
   // 分科目统计
   const bySubject = data.subjects.map((s) => {
     const ps = papers.filter((p) => p.subject === s);
-    const ks = kps.filter((k) => store.getData().papers.find((p) => p.id === k.paperId)?.subject === s);
+    const ks = kps.filter((k) => papers.find((p) => p.id === k.paperId)?.subject === s);
     const pct = ps.length ? Math.round(ps.reduce((a, p) => a + store.scorePercent(p), 0) / ps.length * 10) / 10 : null;
     const mastery = ks.length ? Math.round(ks.reduce((a, k) => a + store.num(k.mastery), 0) / ks.length) : null;
     return { subject: s, count: ps.length, pct, mastery };

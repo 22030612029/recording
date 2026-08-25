@@ -345,11 +345,12 @@ export function targetGap() {
     const avg = subjectAverage(subject);
     const diffScore = Math.round((targetScore - avg.avgScore) * 10) / 10;
     const diffPct = Math.round((targetPct - avg.avgPct) * 10) / 10;
-    // priority
+    // priority：未做卷的科目始终最高优先（先摸底），再按差距分级；达标仅对"有卷且达到"成立
     let priority = "低";
-    if (diffPct > 15 || avg.count === 0) priority = "高";
+    if (avg.count === 0) priority = "高";
+    else if (diffPct > 15) priority = "高";
     else if (diffPct > 5) priority = "中";
-    if (diffPct <= 0) priority = "达标";
+    else if (diffPct <= 0) priority = "达标";
     return {
       subject,
       targetScore, targetTotal, targetPct,
@@ -378,15 +379,29 @@ export function estimateTotal() {
 
 /* ---------- 导入/导出 ---------- */
 export function exportJSON() {
+  const uid = getSessionUserId();
+  const safe = (uid || "default").replace(/[\\/:*?"<>|]/g, "_");
   const blob = new Blob([JSON.stringify(_data, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `kaoyan_study_${todayISO()}.json`;
+  a.download = `kaoyan_study_${safe}_${todayISO()}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/* 存储用量统计：返回 { used, quota, pct }（字节），供设置页预警 */
+export function storageUsage() {
+  try {
+    const key = dataKey();
+    const used = key ? new Blob([localStorage.getItem(key) || ""]).size : 0;
+    const quota = 5 * 1024 * 1024; // 约 5MB
+    return { used, quota, pct: quota ? Math.round((used / quota) * 1000) / 10 : 0 };
+  } catch (e) {
+    return { used: 0, quota: 0, pct: 0 };
+  }
 }
 
 export function importJSON(text) {
