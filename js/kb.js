@@ -253,6 +253,9 @@ export function renderKnowledgeBase(container) {
   const data = store.getData();
   const kbCount = store.listKb().length;
 
+  // 进入知识库即预加载 KaTeX，打开笔记时公式立即可渲染（避免先显示回退文本）
+  ensureKatex().catch(() => {});
+
   container.innerHTML = `
     <div class="section-head">
       <div>
