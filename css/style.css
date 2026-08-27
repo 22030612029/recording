@@ -832,6 +832,19 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .markdown-body .kb-task input { accent-color: var(--accent); }
 .markdown-body .kb-task.done { color: var(--ink-mute); text-decoration: line-through; }
 
+/* LaTeX 公式（KaTeX） */
+.markdown-body .katex { font-size: 1.08em; }
+.markdown-body .katex-display {
+  margin: .9em 0; padding: 8px 6px; overflow-x: auto; overflow-y: hidden;
+  background: rgba(184,134,11,0.05); border-radius: 6px;
+}
+.markdown-body .katex-display::-webkit-scrollbar { height: 5px; }
+.kb-math {
+  font-family: var(--ff-mono); font-size: .95em;
+  background: var(--surface-2); border: 1px dashed var(--line);
+  border-radius: 6px; padding: 1px 6px; white-space: pre-wrap; word-break: break-all;
+}
+
 /* 响应式：窄屏树折叠到顶部 */
 @media (max-width: 820px) {
   .kb-main { flex-direction: column; }

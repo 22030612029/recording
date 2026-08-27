@@ -1,7 +1,7 @@
 /* ============================================================
  * kb.js — 知识库（多级目录 + Markdown 笔记）
  * 树形目录（无限级）、Markdown 编辑/分屏预览、自动保存、
- * 时间记录、搜索、插图（复用压缩上传）
+ * 时间记录、搜索、插图（复用压缩上传）、LaTeX 公式（内置 KaTeX）
  * ============================================================ */
 import { openModal, closeModal, toast, esc, confirmBox } from "./app.js";
 import * as store from "./storage.js";
@@ -24,8 +24,47 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+/* ---------- LaTeX 公式（KaTeX，本地内置、动态加载） ---------- */
+let katexPromise = null;
+function ensureKatex() {
+  if (window.katex) return Promise.resolve(true);
+  if (katexPromise) return katexPromise;
+  katexPromise = new Promise((resolve, reject) => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "./vendor/katex/katex.min.css";
+    document.head.appendChild(link);
+    const s = document.createElement("script");
+    s.src = "./vendor/katex/katex.min.js";
+    s.onload = () => resolve(true);
+    s.onerror = () => { katexPromise = null; reject(new Error("KaTeX 加载失败")); };
+    document.head.appendChild(s);
+  });
+  return katexPromise;
+}
+
+function renderMath(tex, display) {
+  const fallback = () => display
+    ? `<div class="kb-math">${escapeHtml(tex)}</div>`
+    : `<span class="kb-math">${escapeHtml(tex)}</span>`;
+  if (typeof window.katex === "undefined") return fallback();
+  try {
+    return window.katex.renderToString(String(tex || "").trim(), {
+      throwOnError: false, displayMode: !!display,
+      strict: "ignore", trust: false, output: "html",
+    });
+  } catch (e) { return fallback(); }
+}
+
 function inline(s) {
+  // 行内公式 $...$（在 HTML 转义之前提取，保证 LaTeX 原样传给 KaTeX）
+  const math = [];
+  s = String(s).replace(/(^|[^$\w])\$([^$\n]+?)\$(?![$\d])/g, (m, pre, tex) => {
+    math.push(renderMath(tex, false));
+    return pre + "\u0000M" + (math.length - 1) + "\u0000";
+  });
   s = escapeHtml(s);
+  s = s.replace(/\u0000M(\d+)\u0000/g, (m, idx) => math[+idx] || "");
   s = s.replace(/`([^`\n]+)`/g, (m, c) => `<code>${c}</code>`);
   s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, src) => {
     if (!/^(https?:|data:image\/|\/)/i.test(src)) src = "#";
@@ -79,6 +118,23 @@ export function mdToHtml(src) {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
+    // 块级公式 $$...$$（可单行或多行包裹）
+    if (/^\s*\$\$/.test(line)) {
+      const one = line.match(/^\s*\$\$(.+?)\$\$\s*$/);
+      let tex;
+      if (one) { tex = one[1]; i++; }
+      else {
+        const buf = [];
+        const head = line.replace(/^\s*\$\$/, "");
+        if (head.trim()) buf.push(head);
+        i++;
+        while (i < lines.length && !/^\s*\$\$\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+        if (i < lines.length) i++; // 跳过闭合 $$
+        tex = buf.join("\n");
+      }
+      out.push(renderMath(tex, true));
+      continue;
+    }
     // 代码块
     const fence = line.match(/^```\s*([\w-]*)\s*$/);
     if (fence) {
@@ -132,7 +188,7 @@ export function mdToHtml(src) {
     while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^```/.test(lines[i]) &&
            !/^\s*([-*+]|\d+\.)\s+/.test(lines[i]) && !/^\s*>\s?/.test(lines[i]) &&
            !/^\s*(---+|\*\*\*+|___+)\s*$/.test(lines[i]) && !/^\s{0,3}#{1,6}\s/.test(lines[i]) &&
-           !/^\s*\|.*\|\s*$/.test(lines[i])) {
+           !/^\s*\$\$/.test(lines[i]) && !/^\s*\|.*\|\s*$/.test(lines[i])) {
       buf.push(lines[i]);
       i++;
     }
@@ -174,7 +230,7 @@ export function renderKnowledgeBase(container) {
     <div class="section-head">
       <div>
         <h2>知识库</h2>
-        <div class="hint">多级目录 · Markdown 笔记 · 自动保存 · ${kbCount} 个节点</div>
+        <div class="hint">多级目录 · Markdown 笔记 · LaTeX 公式 · 自动保存 · ${kbCount} 个节点</div>
       </div>
     </div>
 
@@ -327,6 +383,8 @@ function renderEditor(editor) {
       <button data-md="link" title="链接">🔗</button>
       <button data-md="image" title="插入图片">🖼</button>
       <button data-md="table" title="表格">≡ 表格</button>
+      <button data-md="math" title="块级公式">Σ 公式</button>
+      <button data-md="mathi" title="行内公式">$x$</button>
       <span class="kb-mode">
         <button data-mode="split" class="${vm === "split" ? "on" : ""}">分屏</button>
         <button data-mode="edit" class="${vm === "edit" ? "on" : ""}">编辑</button>
@@ -356,6 +414,8 @@ function renderEditor(editor) {
 
   // 预览初始
   refreshPreview();
+  // KaTeX 加载完成后重渲染（公式从回退文本变为真正的数学排版）
+  ensureKatex().then(() => { if (pv.isConnected) refreshPreview(); }).catch(() => {});
 
   // 自动保存（400ms 防抖）
   const saveContent = () => {
@@ -394,6 +454,8 @@ function renderEditor(editor) {
       insertAtCursor(ta, tpl);
     },
     image: () => insertImage(ta, refreshPreview, markDirty, saveContent),
+    math: () => wrapSelection(ta, "\n$$\n", "\n$$\n", "\\frac{a}{b}"),
+    mathi: () => wrapSelection(ta, "$", "$", "x^2"),
   };
   e.querySelectorAll("[data-md]").forEach((btn) => {
     btn.onclick = () => { const fn = toolActions[btn.dataset.md]; if (fn) { fn(); ta.focus(); } };
