@@ -671,3 +671,171 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
   .auth-card { padding: 28px 22px 22px; border-radius: var(--r); }
   .auth-mark { width: 48px; height: 48px; font-size: 26px; border-radius: 14px; }
 }
+
+/* ============================================================
+ * 知识库（多级目录 + Markdown）
+ * ============================================================ */
+.kb-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.kb-actions { display: flex; gap: 8px; }
+.kb-search { flex: 1; min-width: 180px; max-width: 340px; margin-left: auto; }
+
+.kb-main { display: flex; gap: 16px; align-items: flex-start; }
+
+.kb-tree {
+  width: 280px; flex-shrink: 0;
+  padding: 14px 12px; max-height: calc(100vh - 230px);
+  overflow-y: auto;
+}
+.kb-tree-head {
+  font-size: 13px; font-weight: 700; color: var(--ink-2);
+  padding: 2px 6px 10px; border-bottom: 1px solid var(--line-soft);
+}
+.kb-tree-list { margin-top: 8px; }
+.kb-tree-empty { text-align: center; color: var(--ink-mute); font-size: 13px; padding: 26px 8px; line-height: 1.8; }
+
+.kb-node { border-radius: 8px; margin: 1px 0; }
+.kb-node > .kb-caret { display: inline-flex; width: 16px; color: var(--ink-mute); }
+.kb-node > .kb-ico { display: inline-flex; width: 18px; text-align: center; }
+.kb-node > .kb-label {
+  font-size: 13.5px; color: var(--ink); cursor: pointer;
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kb-folder > .kb-label { font-weight: 600; }
+.kb-node.selected { background: rgba(184,134,11,0.12); box-shadow: inset 2px 0 0 var(--accent); }
+.kb-node.selected > .kb-label { color: #7a5a12; font-weight: 600; }
+
+.kb-ops { display: none; gap: 2px; margin-left: 6px; }
+.kb-node:hover > .kb-ops { display: inline-flex; }
+.kb-ops button {
+  border: none; background: transparent; color: var(--ink-soft);
+  font-size: 11px; padding: 2px 5px; border-radius: 5px; cursor: pointer;
+}
+.kb-ops button:hover { background: rgba(27,42,78,0.08); color: var(--ink); }
+
+.kb-children { margin-left: 14px; padding-left: 8px; border-left: 1px dashed var(--line); }
+
+/* 编辑器 */
+.kb-editor {
+  flex: 1; min-width: 0;
+  padding: 18px 20px;
+  min-height: 420px;
+  display: flex; flex-direction: column;
+}
+.kb-editor-empty { margin: auto; text-align: center; color: var(--ink-mute); padding: 40px 10px; line-height: 1.9; }
+.kb-editor-empty .empty-ico { font-size: 40px; margin-bottom: 10px; }
+.kb-editor-empty h3 { color: var(--ink-2); margin-bottom: 8px; }
+.kb-editor-folder { padding: 6px 4px; }
+.kb-folder-head { font-size: 19px; font-weight: 700; color: var(--ink); font-family: var(--ff-display); }
+
+.kb-editor-top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.kb-title-input {
+  flex: 1; min-width: 200px;
+  font-size: 20px; font-weight: 700; color: var(--ink);
+  font-family: var(--ff-display);
+  background: transparent; border: none; border-bottom: 1px dashed transparent;
+  padding: 4px 2px; outline: none; transition: border-color .16s ease;
+}
+.kb-title-input:hover, .kb-title-input:focus { border-bottom-color: var(--accent); }
+.kb-meta { font-size: 12px; white-space: nowrap; }
+
+.kb-mdbar {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  padding: 6px 8px; margin-bottom: 10px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+.kb-mdbar button {
+  min-width: 30px; height: 28px; padding: 0 8px;
+  border: none; background: transparent; border-radius: 6px;
+  color: var(--ink-2); font-size: 13px; cursor: pointer;
+}
+.kb-mdbar button:hover { background: rgba(184,134,11,0.14); color: #7a5a12; }
+.kb-mdbar .kb-mode { margin-left: auto; display: inline-flex; gap: 2px; padding: 2px; background: #fff; border-radius: 8px; border: 1px solid var(--line); }
+.kb-mdbar .kb-mode button { font-size: 12px; height: 24px; padding: 0 10px; }
+.kb-mdbar .kb-mode button.on { background: var(--ink); color: #f5efe0; }
+
+.kb-editor-body { display: flex; gap: 12px; flex: 1; min-height: 320px; }
+.kb-editor-body.mode-edit .kb-textarea { display: block; }
+.kb-editor-body.mode-edit .kb-preview { display: none; }
+.kb-editor-body.mode-preview .kb-textarea { display: none; }
+.kb-editor-body.mode-preview .kb-preview { display: block; }
+.kb-editor-body.mode-split .kb-textarea, .kb-editor-body.mode-split .kb-preview { display: block; flex: 1; }
+
+.kb-textarea {
+  flex: 1; width: 100%; min-height: 320px; resize: vertical;
+  padding: 12px 14px;
+  font-family: var(--ff-mono); font-size: 13.5px; line-height: 1.75; color: var(--ink);
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r-sm);
+  outline: none; transition: border-color .16s ease, box-shadow .16s ease;
+}
+.kb-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(184,134,11,0.12); }
+
+.kb-preview {
+  flex: 1; min-height: 320px;
+  padding: 12px 16px; overflow-y: auto;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+
+.kb-savebar {
+  display: flex; align-items: center; gap: 6px; margin-top: 8px;
+  font-size: 12px; color: var(--ink-mute);
+}
+.kb-save-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.kb-save-dot.dirty { background: var(--accent); animation: kb-blink 1s ease infinite; }
+@keyframes kb-blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* Markdown 渲染样式 */
+.markdown-body { font-size: 14.5px; line-height: 1.85; color: var(--ink); }
+.markdown-body h1, .markdown-body h2, .markdown-body h3,
+.markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  color: var(--ink); font-family: var(--ff-display); margin: 1.1em 0 .5em; line-height: 1.4;
+}
+.markdown-body h1 { font-size: 1.7em; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.markdown-body h2 { font-size: 1.45em; padding-left: 10px; border-left: 3px solid var(--accent); }
+.markdown-body h3 { font-size: 1.25em; }
+.markdown-body p { margin: .55em 0; }
+.markdown-body strong { color: #14305c; }
+.markdown-body em { color: var(--ink-2); }
+.markdown-body ul, .markdown-body ol { margin: .5em 0; padding-left: 1.5em; }
+.markdown-body li { margin: .22em 0; }
+.markdown-body li > ul, .markdown-body li > ol { margin: .1em 0; }
+.markdown-body code {
+  font-family: var(--ff-mono); font-size: .9em;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 4px; padding: 1px 5px; color: #a05a1c;
+}
+.markdown-body pre {
+  background: #f4efe3; border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 14px; overflow-x: auto; margin: .7em 0;
+}
+.markdown-body pre code { background: none; border: none; padding: 0; color: var(--ink-2); font-size: 13px; line-height: 1.7; }
+.markdown-body blockquote {
+  margin: .7em 0; padding: 8px 14px;
+  background: rgba(184,134,11,0.07);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0; color: var(--ink-2);
+}
+.markdown-body blockquote p { margin: .2em 0; }
+.markdown-body a { color: #a06f12; text-decoration: underline; text-underline-offset: 2px; }
+.markdown-body img { max-width: 100%; border-radius: 8px; margin: .4em 0; border: 1px solid var(--line); }
+.markdown-body hr { border: none; border-top: 1px dashed var(--line); margin: 1.2em 0; }
+.markdown-body table { border-collapse: collapse; margin: .7em 0; width: 100%; font-size: 13.5px; }
+.markdown-body th, .markdown-body td {
+  border: 1px solid var(--line); padding: 6px 12px; text-align: left;
+}
+.markdown-body th { background: var(--surface-2); font-weight: 700; color: var(--ink-2); }
+.markdown-body tr:nth-child(even) td { background: rgba(27,42,78,0.02); }
+.markdown-body .kb-task { display: inline-flex; align-items: center; gap: 6px; }
+.markdown-body .kb-task input { accent-color: var(--accent); }
+.markdown-body .kb-task.done { color: var(--ink-mute); text-decoration: line-through; }
+
+/* 响应式：窄屏树折叠到顶部 */
+@media (max-width: 820px) {
+  .kb-main { flex-direction: column; }
+  .kb-tree { width: 100%; max-height: 260px; }
+  .kb-editor-body { flex-direction: column; }
+  .kb-editor-body.mode-split .kb-textarea, .kb-editor-body.mode-split .kb-preview { min-height: 240px; }
+}

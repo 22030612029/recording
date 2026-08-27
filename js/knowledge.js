@@ -454,7 +454,7 @@ function uniqueModules(data) {
 }
 
 /* ---------- 图片工具 ---------- */
-function fileToCompressedDataUrl(file, maxSize = 900, quality = 0.72) {
+export function fileToCompressedDataUrl(file, maxSize = 900, quality = 0.72) {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = () => {

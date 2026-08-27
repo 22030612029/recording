@@ -5,6 +5,7 @@ import * as store from "./storage.js";
 import * as auth from "./auth.js";
 import { renderPapers, openPaperForm, resetPapersFilter } from "./papers.js";
 import { renderKnowledge, resetKnowledgeFilter } from "./knowledge.js";
+import { renderKnowledgeBase } from "./kb.js";
 import { renderAnalysis } from "./analysis.js";
 import { renderMiniTrend, resizeAll } from "./charts.js";
 
@@ -77,6 +78,7 @@ const VIEWS = {
   dashboard: { title: "仪表盘", render: renderDashboard },
   papers: { title: "刷题记录", render: (c) => renderPapers(c) },
   knowledge: { title: "错题与知识点", render: (c) => renderKnowledge(c) },
+  kb: { title: "知识库", render: (c) => renderKnowledgeBase(c) },
   analysis: { title: "学情分析", render: (c) => renderAnalysis(c) },
   settings: { title: "数据与设置", render: renderSettings },
 };

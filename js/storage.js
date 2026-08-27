@@ -20,6 +20,7 @@ function defaultData() {
     paperTypes: ["真题", "模拟卷", "专项练习"],
     errorReasons: ["概念混淆", "计算错误", "审题失误", "记忆偏差", "时间不足", "其他"],
     kpTypes: ["关键知识点", "薄弱环节", "复习建议"],
+    kb: [], // 知识库（多级目录 + Markdown 笔记）
     targetScore: 90, // 总体目标百分比（保留，向后兼容）
     activeTargetId: "",
     targets: [], // 目标院校数组
@@ -57,6 +58,7 @@ export function load() {
       if (!Array.isArray(_data.errors)) _data.errors = [];
       if (!Array.isArray(_data.knowledge)) _data.knowledge = [];
       if (!Array.isArray(_data.targets)) _data.targets = [];
+      if (!Array.isArray(_data.kb)) _data.kb = [];
       if (!_data.activeTargetId && _data.targets.length) _data.activeTargetId = _data.targets[0].id;
 
       // —— 2026-08-22 迁移：科目键「专业课」统一改名为「408」 ——
@@ -557,6 +559,85 @@ function sampleKnowledge(papers) {
     mastery: k.mastery,
     createdAt: Date.now(),
   }));
+}
+
+/* ---------- 知识库（多级目录 + Markdown 笔记） ----------
+ * 节点结构：
+ * { id, title, type: "folder" | "note", parentId: string | null,
+ *   content: "", sort, createdAt, updatedAt }
+ * parentId = null 表示根节点；folder 可嵌套任意层级（多级目录）
+ */
+export function listKb() {
+  if (!Array.isArray(_data.kb)) _data.kb = [];
+  return _data.kb;
+}
+export function getKbNode(id) {
+  return listKb().find((n) => n.id === id) || null;
+}
+export function addKbNode(raw) {
+  const now = Date.now();
+  const nodes = listKb();
+  const parentId = raw.parentId || null;
+  const sibs = nodes.filter((n) => (n.parentId || null) === parentId);
+  const node = {
+    id: uid("n"),
+    title: (raw.title || "").trim() || "未命名",
+    type: raw.type === "folder" ? "folder" : "note",
+    parentId,
+    content: raw.content || "",
+    sort: sibs.length ? Math.max(...sibs.map((x) => x.sort || 0)) + 1 : 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+  nodes.push(node);
+  save();
+  return node;
+}
+export function updateKbNode(id, patch) {
+  const n = getKbNode(id);
+  if (!n) return null;
+  if (patch.title != null) n.title = (patch.title || "").trim() || n.title;
+  if (patch.content != null) n.content = patch.content;
+  if (patch.parentId !== undefined) n.parentId = patch.parentId || null;
+  if (patch.sort != null) n.sort = patch.sort;
+  n.updatedAt = Date.now();
+  save();
+  return n;
+}
+/* 删除节点及其全部后代（级联） */
+export function deleteKbNode(id) {
+  const nodes = listKb();
+  if (!nodes.find((n) => n.id === id)) return false;
+  const toDelete = new Set([id]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    nodes.forEach((n) => {
+      if (n.parentId && toDelete.has(n.parentId) && !toDelete.has(n.id)) { toDelete.add(n.id); changed = true; }
+    });
+  }
+  _data.kb = nodes.filter((n) => !toDelete.has(n.id));
+  save();
+  return true;
+}
+/* 把节点移动到指定文件夹下；禁止移到自己或自己的后代 */
+export function moveKbNode(id, newParentId) {
+  if (id === newParentId) return null;
+  const target = getKbNode(id);
+  if (!target) return null;
+  if (!newParentId) { target.parentId = null; target.updatedAt = Date.now(); save(); return target; }
+  const parent = getKbNode(newParentId);
+  if (!parent || parent.type !== "folder") return null;
+  let cur = newParentId;
+  while (cur) {
+    if (cur === id) return null;
+    const p = getKbNode(cur);
+    cur = p ? p.parentId : null;
+  }
+  target.parentId = newParentId;
+  target.updatedAt = Date.now();
+  save();
+  return target;
 }
 
 // 初始化加载
