@@ -852,3 +852,48 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
   .kb-editor-body { flex-direction: column; }
   .kb-editor-body.mode-split .kb-textarea, .kb-editor-body.mode-split .kb-preview { min-height: 240px; }
 }
+
+/* ============================================================
+   大屏沉浸模式：隐藏滚动条 + 悬浮侧边栏（默认图标窄条，hover 展开）
+   ============================================================ */
+/* 全局隐藏滚动条（保留滚轮/触控板滚动功能） */
+html, body { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+@media (min-width: 861px) {
+  .app-shell { grid-template-columns: 64px 1fr; }
+  .sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0;
+    width: 64px; z-index: 40;
+    padding: 22px 8px;
+    overflow: hidden;
+    transition: width .26s cubic-bezier(.3,.8,.3,1), box-shadow .26s ease, padding .26s ease;
+  }
+  .sidebar:hover {
+    width: 232px;
+    padding: 22px 14px;
+    box-shadow: 6px 0 32px rgba(27,42,78,0.10);
+  }
+  /* 收起态：只保留图标/状态点，文字隐藏 */
+  .sidebar .brand { justify-content: center; padding: 6px 0 18px; }
+  .sidebar .brand-text,
+  .sidebar .nav-label,
+  .sidebar .sidebar-foot .storage-meta,
+  .sidebar .user-logout {
+    opacity: 0; width: 0; overflow: hidden; white-space: nowrap;
+    transition: opacity .18s ease;
+  }
+  .sidebar .nav-item { justify-content: center; padding: 11px; }
+  .sidebar .sidebar-foot { justify-content: center; gap: 0; }
+  /* hover 展开态：文字渐显 */
+  .sidebar:hover .brand { justify-content: flex-start; padding: 6px 8px 18px; }
+  .sidebar:hover .brand-text,
+  .sidebar:hover .nav-label,
+  .sidebar:hover .sidebar-foot .storage-meta,
+  .sidebar:hover .user-logout {
+    opacity: 1; width: auto;
+    transition: opacity .22s ease .06s;
+  }
+  .sidebar:hover .nav-item { justify-content: flex-start; padding: 11px 14px; }
+  .sidebar:hover .sidebar-foot { justify-content: flex-start; gap: 8px; }
+}
