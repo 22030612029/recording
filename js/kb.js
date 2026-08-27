@@ -63,6 +63,16 @@ function inline(s) {
     math.push(renderMath(tex, false));
     return pre + "\u0000M" + (math.length - 1) + "\u0000";
   });
+  // LaTeX 标准行内定界符 \(...\)
+  s = s.replace(/\\\(([^$\n]+?)\\\)/g, (m, tex) => {
+    math.push(renderMath(tex, false));
+    return "\u0000M" + (math.length - 1) + "\u0000";
+  });
+  // LaTeX 标准块级定界符 \[...\]（即使嵌在段落行内也按块级渲染）
+  s = s.replace(/\\\[([^$\n]+?)\\\]/g, (m, tex) => {
+    math.push(renderMath(tex, true));
+    return "\u0000M" + (math.length - 1) + "\u0000";
+  });
   s = escapeHtml(s);
   s = s.replace(/\u0000M(\d+)\u0000/g, (m, idx) => math[+idx] || "");
   s = s.replace(/`([^`\n]+)`/g, (m, c) => `<code>${c}</code>`);
@@ -135,6 +145,23 @@ export function mdToHtml(src) {
       out.push(renderMath(tex, true));
       continue;
     }
+    // 块级公式 \[...\]（LaTeX 标准写法，可单行或多行）
+    if (/^\s*\\\[/.test(line)) {
+      const one = line.match(/^\s*\\\[(.+?)\\\]\s*$/);
+      let tex;
+      if (one) { tex = one[1]; i++; }
+      else {
+        const buf = [];
+        const head = line.replace(/^\s*\\\[/, "");
+        if (head.trim()) buf.push(head);
+        i++;
+        while (i < lines.length && !/^\s*\\\]\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+        if (i < lines.length) i++; // 跳过闭合 \]
+        tex = buf.join("\n");
+      }
+      out.push(renderMath(tex, true));
+      continue;
+    }
     // 代码块
     const fence = line.match(/^```\s*([\w-]*)\s*$/);
     if (fence) {
@@ -188,7 +215,7 @@ export function mdToHtml(src) {
     while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^```/.test(lines[i]) &&
            !/^\s*([-*+]|\d+\.)\s+/.test(lines[i]) && !/^\s*>\s?/.test(lines[i]) &&
            !/^\s*(---+|\*\*\*+|___+)\s*$/.test(lines[i]) && !/^\s{0,3}#{1,6}\s/.test(lines[i]) &&
-           !/^\s*\$\$/.test(lines[i]) && !/^\s*\|.*\|\s*$/.test(lines[i])) {
+           !/^\s*\$\$/.test(lines[i]) && !/^\s*\\\[/.test(lines[i]) && !/^\s*\|.*\|\s*$/.test(lines[i])) {
       buf.push(lines[i]);
       i++;
     }
