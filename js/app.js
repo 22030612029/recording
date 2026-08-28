@@ -228,7 +228,7 @@ function renderDashboard(container) {
       <div class="card chart-card">
         <div class="card-title">成绩趋势<span class="count">近 ${Math.min(10, papers.length)} 次</span></div>
         ${papers.length
-          ? `<div id="chart-mini" style="width:100%;height:180px"></div>`
+          ? `<div id="chart-mini" style="width:100%;height:220px"></div>`
           : `<div class="chart-empty">暂无数据，先录入一张试卷吧</div>`}
       </div>
       <div class="card">
