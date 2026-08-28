@@ -20,6 +20,7 @@ function defaultData() {
     paperTypes: ["真题", "模拟卷", "专项练习"],
     errorReasons: ["概念混淆", "计算错误", "审题失误", "记忆偏差", "时间不足", "其他"],
     kpTypes: ["关键知识点", "薄弱环节", "复习建议"],
+    tags: [], // 用户自定义标签
     kb: [], // 知识库（多级目录 + Markdown 笔记）
     targetScore: 90, // 总体目标百分比（保留，向后兼容）
     activeTargetId: "",
@@ -182,6 +183,7 @@ export function deletePaper(id) {
 
 /* ---------- 错题 CRUD ---------- */
 export function addError(e) {
+  const now = Date.now();
   const item = {
     id: uid("e"),
     paperId: e.paperId || "",
@@ -192,7 +194,13 @@ export function addError(e) {
     module: e.module?.trim() || "未分类",
     linkedKpId: e.linkedKpId || "",
     image: e.image || "", // 题目图片（dataURL）
-    createdAt: Date.now(),
+    tags: Array.isArray(e.tags) ? e.tags.filter(Boolean) : [],
+    // 艾宾浩斯复习
+    reviewStage: 0,       // 0=未开始, 1~5=第N轮
+    nextReview: now + 24 * 3600 * 1000, // 下次复习时间（默认1天后）
+    lastReview: 0,
+    reviewCount: 0,
+    createdAt: now,
   };
   _data.errors.push(item);
   save();
@@ -220,6 +228,7 @@ export function addKnowledge(k) {
     content: k.content?.trim() || "",
     mastery: clamp(num(k.mastery, 0), 0, 100),
     image: k.image || "", // 知识点配图（dataURL）
+    tags: Array.isArray(k.tags) ? k.tags.filter(Boolean) : [],
     createdAt: Date.now(),
   };
   _data.knowledge.push(item);
@@ -638,6 +647,80 @@ export function moveKbNode(id, newParentId) {
   target.updatedAt = Date.now();
   save();
   return target;
+}
+
+/* ---------- 标签管理 ---------- */
+export function getAllTags() {
+  if (!Array.isArray(_data.tags)) _data.tags = [];
+  return _data.tags;
+}
+export function addTag(name) {
+  name = (name || "").trim();
+  if (!name) return false;
+  if (!Array.isArray(_data.tags)) _data.tags = [];
+  if (_data.tags.includes(name)) return false;
+  _data.tags.push(name);
+  save();
+  return true;
+}
+export function removeTag(name) {
+  if (!Array.isArray(_data.tags)) return;
+  _data.tags = _data.tags.filter((t) => t !== name);
+  // 同时从错题和知识点中移除该标签
+  _data.errors.forEach((e) => { if (Array.isArray(e.tags)) e.tags = e.tags.filter((t) => t !== name); });
+  _data.knowledge.forEach((k) => { if (Array.isArray(k.tags)) k.tags = k.tags.filter((t) => t !== name); });
+  save();
+}
+
+/* ---------- 艾宾浩斯复习 ---------- */
+const REVIEW_INTERVALS = [1, 2, 4, 7, 15]; // 第1~5轮间隔（天）
+const DAY = 24 * 3600 * 1000;
+
+/* 返回到期需要复习的错题（nextReview <= now，且未完成全部轮次） */
+export function getDueReviews() {
+  const now = Date.now();
+  return _data.errors.filter((e) => {
+    if (e.reviewStage >= REVIEW_INTERVALS.length) return false; // 已完成全部轮次
+    return (e.nextReview || 0) <= now;
+  });
+}
+
+/* 标记某道错题已复习，推进到下一阶段 */
+export function markReviewed(id) {
+  const e = _data.errors.find((x) => x.id === id);
+  if (!e) return null;
+  const now = Date.now();
+  e.lastReview = now;
+  e.reviewCount = (e.reviewCount || 0) + 1;
+  if (e.reviewStage < REVIEW_INTERVALS.length) {
+    const interval = REVIEW_INTERVALS[e.reviewStage];
+    e.reviewStage += 1;
+    e.nextReview = now + interval * DAY;
+  }
+  save();
+  return e;
+}
+
+/* 跳过本次复习（推迟1天） */
+export function snoozeReview(id) {
+  const e = _data.errors.find((x) => x.id === id);
+  if (!e) return null;
+  e.nextReview = Date.now() + DAY;
+  save();
+  return e;
+}
+
+/* 复习统计：{ due, total, completed, todayReviewed } */
+export function getReviewStats() {
+  const now = Date.now();
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  let due = 0, completed = 0, todayReviewed = 0;
+  _data.errors.forEach((e) => {
+    if (e.reviewStage >= REVIEW_INTERVALS.length) { completed++; return; }
+    if ((e.nextReview || 0) <= now) due++;
+    if ((e.lastReview || 0) >= todayStart.getTime()) todayReviewed++;
+  });
+  return { due, total: _data.errors.length, completed, todayReviewed };
 }
 
 // 初始化加载

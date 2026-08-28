@@ -3,6 +3,7 @@
  * ============================================================ */
 import * as store from "./storage.js";
 import * as auth from "./auth.js";
+import * as features from "./features.js";
 import { renderPapers, openPaperForm, resetPapersFilter } from "./papers.js";
 import { renderKnowledge, resetKnowledgeFilter } from "./knowledge.js";
 import { renderKnowledgeBase } from "./kb.js";
@@ -84,7 +85,7 @@ const VIEWS = {
 };
 let currentView = "dashboard";
 
-function switchView(name) {
+export function switchView(name) {
   if (!VIEWS[name]) name = "dashboard";
   currentView = name;
   document.querySelectorAll(".view").forEach((v) => {
@@ -224,6 +225,11 @@ function renderDashboard(container) {
       </div>
     </div>
 
+    ${data.errors.length ? `
+    <div class="card review-card" style="margin-top:16px;border-top:3px solid var(--accent)">
+      <div id="reviewPanel"></div>
+    </div>` : ""}
+
     <div class="grid dash-grid">
       <div class="card chart-card">
         <div class="card-title">成绩趋势<span class="count">近 ${Math.min(10, papers.length)} 次</span></div>
@@ -281,6 +287,10 @@ function renderDashboard(container) {
   const dashAddTarget = container.querySelector("#dashAddTarget");
   if (dashAddTarget) dashAddTarget.onclick = () => openTargetForm();
   container.querySelectorAll("[data-goto]").forEach((b) => b.onclick = () => switchView(b.dataset.goto));
+
+  // 艾宾浩斯复习面板
+  const reviewPanel = container.querySelector("#reviewPanel");
+  if (reviewPanel) features.renderReviewPanel(reviewPanel);
 
   if (papers.length) requestAnimationFrame(() => renderMiniTrend(container));
 }
@@ -659,6 +669,31 @@ function enterApp(user) {
   resetKnowledgeFilter();
   store.load();
   switchView("dashboard");
+
+  // 备份提醒：超过7天未备份或从未备份时提醒
+  setTimeout(() => {
+    if (features.shouldRemindBackup()) {
+      openModal({
+        title: "数据备份提醒",
+        body: `
+          <p style="font-size:14px;line-height:1.7;color:var(--ink-2);margin:0 0 12px">
+            你的学习数据保存在本机浏览器中，清理缓存或更换设备会导致数据丢失。建议定期导出备份。
+          </p>
+          <p style="font-size:13px;color:var(--ink-mute);margin:0">也可随时按 <b>Ctrl+S</b> 快速导出备份。</p>
+        `,
+        footer: `<button class="btn btn-ghost" id="bk_later">稍后提醒</button><button class="btn btn-primary" id="bk_now">立即导出备份</button>`,
+        onMount: (root) => {
+          root.querySelector("#bk_later").onclick = closeModal;
+          root.querySelector("#bk_now").onclick = () => {
+            store.exportJSON();
+            features.markBackedUp();
+            closeModal();
+            toast("已导出备份", "ok");
+          };
+        },
+      });
+    }
+  }, 1500);
 }
 
 function setupAuth() {
@@ -717,8 +752,61 @@ function setupAuth() {
   }
 }
 
+/* ---------- 全局搜索 ---------- */
+let _searchTimer = null;
+export function openGlobalSearch() {
+  openModal({
+    title: "全局搜索",
+    body: `
+      <div class="search-wrap">
+        <div class="search global-search-box">
+          <input class="input" id="gsInput" type="search" placeholder="搜索错题、知识点、试卷、知识库笔记…（Ctrl+K）" autofocus />
+        </div>
+        <div id="gsResults" class="gs-results">
+          <div class="gs-empty">输入关键词开始搜索</div>
+        </div>
+      </div>
+    `,
+    footer: `<button class="btn btn-ghost" id="gs_close">关闭</button>`,
+    onMount: (root) => {
+      const input = root.querySelector("#gsInput");
+      const results = root.querySelector("#gsResults");
+      root.querySelector("#gs_close").onclick = closeModal;
+      input.focus();
+      input.oninput = () => {
+        clearTimeout(_searchTimer);
+        _searchTimer = setTimeout(() => {
+          const q = input.value.trim();
+          if (!q) { results.innerHTML = `<div class="gs-empty">输入关键词开始搜索</div>`; return; }
+          const res = features.globalSearch(q);
+          if (!res.length) { results.innerHTML = `<div class="gs-empty">未找到「${esc(q)}」相关内容</div>`; return; }
+          results.innerHTML = res.map((r) => `
+            <div class="gs-item" data-view="${r.view}" data-id="${r.id}">
+              <span class="gs-type tag tag-soft">${esc(r.type)}</span>
+              <div class="gs-item-body">
+                <div class="gs-title">${esc(r.title)}</div>
+                <div class="gs-sub">${esc(r.sub)}</div>
+              </div>
+            </div>
+          `).join("");
+          results.querySelectorAll(".gs-item").forEach((el) => {
+            el.onclick = () => {
+              switchView(el.dataset.view);
+              closeModal();
+              toast(`已跳转到${el.dataset.view === "knowledge" ? "错题与知识点" : el.dataset.view === "papers" ? "刷题记录" : el.dataset.view === "kb" ? "知识库" : el.dataset.view}`, "ok");
+            };
+          });
+        }, 200);
+      };
+    },
+  });
+}
+
 /* ---------- 初始化 ---------- */
 function init() {
+  // 主题初始化（暗色模式）
+  features.initTheme();
+
   // 导航绑定
   document.querySelectorAll(".nav-item, .tab-item").forEach((b) => {
     b.onclick = () => { switchView(b.dataset.view); document.getElementById("sidebar")?.classList.remove("open"); };
@@ -731,6 +819,36 @@ function init() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !maskEl().hidden) closeModal();
   });
+
+  // 键盘快捷键
+  features.initShortcuts({
+    onSwitchView: (v) => switchView(v),
+    onOpenSearch: () => openGlobalSearch(),
+    onSave: () => {
+      // Ctrl+S：如果在知识库页面，触发保存；否则导出备份
+      if (currentView === "kb") {
+        const evt = new CustomEvent("kb:save");
+        document.dispatchEvent(evt);
+        toast("知识库已保存", "ok");
+      } else {
+        store.exportJSON();
+        features.markBackedUp();
+        toast("已导出备份", "ok");
+      }
+    },
+  });
+
+  // 全局搜索按钮
+  const searchBtn = document.getElementById("globalSearchBtn");
+  if (searchBtn) searchBtn.onclick = () => openGlobalSearch();
+
+  // 暗色模式切换按钮
+  const themeBtn = document.getElementById("themeToggleBtn");
+  if (themeBtn) themeBtn.onclick = () => {
+    const next = features.toggleTheme();
+    toast(next === "dark" ? "已切换暗色模式" : "已切换亮色模式", "ok");
+  };
+
   // 侧栏
   setupSidebar();
   // 数据变更 → 刷新当前视图

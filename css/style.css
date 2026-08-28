@@ -931,3 +931,129 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 @media (min-width: 1600px) {
   .content { max-width: 1400px; padding: 32px; }
 }
+
+/* ============================================================
+   暗色模式
+   ============================================================ */
+:root[data-theme="dark"], .dark {
+  --bg: #141820;
+  --bg-2: #1c2130;
+  --surface: #1e2433;
+  --surface-2: #252c3e;
+  --line: #2e3648;
+  --line-soft: rgba(255,255,255,0.08);
+  --ink: #e8eaf0;
+  --ink-2: #b8bcc8;
+  --ink-soft: #8a90a0;
+  --ink-mute: #5c6270;
+  --accent: #d4a452;
+  --accent-2: #e0b468;
+  --accent-soft: #3a3020;
+  --tier-excellent: #4ade80;
+  --tier-good: #fbbf24;
+  --tier-pass: #fb923c;
+  --tier-fail: #f87171;
+  --tier-excellent-bg: rgba(74,222,128,0.12);
+  --tier-good-bg: rgba(251,191,36,0.12);
+  --tier-pass-bg: rgba(251,146,60,0.12);
+  --tier-fail-bg: rgba(248,113,113,0.12);
+  --danger: #f87171;
+  --ok: #4ade80;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow: 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,0.5);
+}
+:root[data-theme="dark"] .topbar, .dark .topbar { background: rgba(20,24,32,0.85); }
+:root[data-theme="dark"] .sidebar, .dark .sidebar { background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%); }
+:root[data-theme="dark"] .card, .dark .card { background: var(--surface); }
+:root[data-theme="dark"] input, .dark input,
+:root[data-theme="dark"] textarea, .dark textarea,
+:root[data-theme="dark"] select, .dark select { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
+:root[data-theme="dark"] .markdown-body pre, .dark .markdown-body pre { background: var(--surface-2); }
+:root[data-theme="dark"] .kb-preview, .dark .kb-preview { background: var(--surface); }
+:root[data-theme="dark"] img, .dark img { filter: brightness(0.92); }
+
+/* ============================================================
+   图标按钮（搜索/主题切换）
+   ============================================================ */
+.icon-btn {
+  display: inline-grid; place-items: center;
+  width: 38px; height: 38px;
+  border: 1px solid var(--line); background: var(--surface);
+  border-radius: var(--r-sm); color: var(--ink-soft);
+  font-size: 18px; cursor: pointer; transition: all .16s ease;
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--ink); border-color: var(--accent); }
+
+/* ============================================================
+   全局搜索结果
+   ============================================================ */
+.global-search-box { margin-bottom: 14px; }
+.global-search-box .input { font-size: 15px; padding: 12px 16px; }
+.gs-results { max-height: 50vh; overflow-y: auto; }
+.gs-empty { text-align: center; padding: 40px 20px; color: var(--ink-mute); font-size: 14px; }
+.gs-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 14px; border-radius: var(--r-sm); cursor: pointer;
+  transition: background .14s ease; border: 1px solid transparent;
+}
+.gs-item:hover { background: var(--surface-2); border-color: var(--line); }
+.gs-type { flex-shrink: 0; font-size: 11px; padding: 2px 8px; }
+.gs-item-body { flex: 1; min-width: 0; }
+.gs-title { font-size: 14px; font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-sub { font-size: 12px; color: var(--ink-mute); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ============================================================
+   标签（软标签）
+   ============================================================ */
+.tag-soft {
+  background: var(--surface-2); color: var(--ink-soft);
+  border: 1px solid var(--line); font-size: 11px;
+  padding: 2px 8px; border-radius: var(--r-pill);
+}
+
+/* ============================================================
+   艾宾浩斯复习面板
+   ============================================================ */
+.review-card { overflow: hidden; }
+.review-head {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+}
+.review-title { font-size: 16px; font-weight: 600; color: var(--ink); }
+.review-count {
+  display: inline-grid; place-items: center;
+  min-width: 24px; height: 24px; padding: 0 8px;
+  background: var(--accent); color: #fff; font-size: 13px;
+  font-weight: 700; border-radius: 12px; margin-left: 6px;
+}
+.review-stats { font-size: 12px; color: var(--ink-mute); }
+.review-list { display: flex; flex-direction: column; gap: 10px; }
+.review-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.review-item-num {
+  flex-shrink: 0; width: 28px; height: 28px;
+  display: grid; place-items: center;
+  background: var(--ink); color: #fff; font-size: 13px;
+  font-weight: 700; border-radius: 50%;
+}
+.review-item-body { flex: 1; min-width: 0; }
+.review-item-q { font-size: 14px; color: var(--ink); line-height: 1.5; margin-bottom: 6px; }
+.review-item-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.review-tag { font-size: 11px; padding: 2px 8px; background: var(--accent-soft); color: var(--accent); border-radius: var(--r-pill); }
+.review-reason { font-size: 11px; padding: 2px 8px; background: var(--tier-fail-bg); color: var(--tier-fail); border-radius: var(--r-pill); }
+.review-stage { font-size: 11px; padding: 2px 8px; background: var(--surface); color: var(--ink-soft); border-radius: var(--r-pill); border: 1px solid var(--line); }
+.review-item-answer { font-size: 12.5px; color: var(--ok); margin-top: 6px; }
+.review-item-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.review-empty { text-align: center; padding: 30px 20px; }
+.review-empty-ico {
+  font-size: 36px; width: 64px; height: 64px;
+  display: grid; place-items: center; margin: 0 auto 12px;
+  background: var(--tier-excellent-bg); color: var(--ok);
+  border-radius: 50%;
+}
+.review-empty h3 { font-size: 16px; color: var(--ink); margin: 0 0 6px; }
+.review-empty p { font-size: 13px; color: var(--ink-mute); margin: 0; }

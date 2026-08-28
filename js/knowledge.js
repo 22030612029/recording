@@ -6,8 +6,20 @@ import { openModal, closeModal, toast, esc, confirmBox } from "./app.js";
 import * as store from "./storage.js";
 
 let activeSub = "errors";
-let filter = { q: "", subject: "", module: "", reason: "", type: "", kSort: "new" };
+let filter = { q: "", subject: "", module: "", reason: "", type: "", kSort: "new", tag: "" };
 let qTimer = null;
+
+/* 解析逗号分隔的标签字符串为去重数组 */
+function parseTags(str) {
+  if (!str) return [];
+  return [...new Set(str.split(/[,，]/).map((t) => t.trim()).filter(Boolean))];
+}
+
+/* 渲染标签 HTML */
+function tagsHTML(tags) {
+  if (!Array.isArray(tags) || !tags.length) return "";
+  return tags.map((t) => `<span class="tag tag-soft" data-tag="${esc(t)}">${esc(t)}</span>`).join("");
+}
 
 /* 账号切换时重置筛选（由 app.js 在进入应用时调用） */
 export function resetKnowledgeFilter() {
@@ -138,6 +150,7 @@ function errorItemHTML(e, data) {
         <span class="tag tag-danger">${esc(e.reason)}</span>
         <span class="tag tag-ink">${esc(p?.subject || "—")}</span>
         <span class="tag tag-accent">${esc(e.module)}</span>
+        ${tagsHTML(e.tags)}
         ${p ? `<span class="muted" style="font-size:12px">来自「${esc(p.name)}」</span>` : ""}
       </div>
       <div class="item-title">${esc(e.question)}</div>
@@ -202,6 +215,7 @@ function knowledgeItemHTML(k, data) {
         <span class="tag ${toneClass}">${esc(k.type)}</span>
         <span class="tag tag-ink">${esc(p?.subject || "—")}</span>
         <span class="tag tag-accent">${esc(k.module)}</span>
+        ${tagsHTML(k.tags)}
         <span class="tier ${masteryTone}"><span class="dot-sm"></span>掌握 ${store.num(k.mastery)}%</span>
         ${p ? `<span class="muted" style="font-size:12px">来自「${esc(p.name)}」</span>` : ""}
       </div>
@@ -271,6 +285,10 @@ export function openErrorForm(item = null) {
           <input class="input" id="ef_module" value="${esc(e.module)}" placeholder="如 极限 / 毛中特" />
         </div>
         <div class="field span-2">
+          <label>标签（逗号分隔，可选）</label>
+          <input class="input" id="ef_tags" value="${esc((e.tags || []).join(", "))}" placeholder="如 高频考点, 易错题, 需背诵" />
+        </div>
+        <div class="field span-2">
           <label>题目图片</label>
           <div class="img-pick">
             ${e.image ? `<img class="img-prev" id="ef_imgPrev" src="${e.image}" alt="题目图片" data-view-img />` : ""}
@@ -315,6 +333,7 @@ export function openErrorForm(item = null) {
           correctAnswer: root.querySelector("#ef_correct").value.trim(),
           reason: root.querySelector("#ef_reason").value,
           module: root.querySelector("#ef_module").value.trim() || "未分类",
+          tags: parseTags(root.querySelector("#ef_tags").value),
           image: imgVal,
         };
         if (isEdit) store.updateError(item.id, payload);
@@ -383,6 +402,10 @@ export function openKnowledgeForm(item = null) {
           <input class="input" id="kf_module" value="${esc(k.module)}" placeholder="如 积分 / 阅读" />
         </div>
         <div class="field span-2">
+          <label>标签（逗号分隔，可选）</label>
+          <input class="input" id="kf_tags" value="${esc((k.tags || []).join(", "))}" placeholder="如 核心考点, 公式, 需背诵" />
+        </div>
+        <div class="field span-2">
           <label>内容<span class="req">*</span></label>
           <textarea class="textarea" id="kf_content" placeholder="记录要点、薄弱原因或复习建议">${esc(k.content)}</textarea>
         </div>
@@ -432,6 +455,7 @@ export function openKnowledgeForm(item = null) {
           paperId: root.querySelector("#kf_paper").value,
           type: root.querySelector("#kf_type").value,
           module: root.querySelector("#kf_module").value.trim() || "未分类",
+          tags: parseTags(root.querySelector("#kf_tags").value),
           content,
           mastery: parseInt(m.value, 10) || 0,
           image: imgVal,
