@@ -861,7 +861,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 *::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
 @media (min-width: 861px) {
-  .app-shell { grid-template-columns: 64px 1fr; }
+  .app-shell { display: block; }
   .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0;
     width: 64px; z-index: 40;
@@ -869,6 +869,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     overflow: hidden;
     transition: width .26s cubic-bezier(.3,.8,.3,1), box-shadow .26s ease, padding .26s ease;
   }
+  .main-wrap { margin-left: 64px; }
   .sidebar:hover {
     width: 232px;
     padding: 22px 14px;
