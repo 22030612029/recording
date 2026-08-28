@@ -452,7 +452,7 @@ function bindEditorEvents(editor, container) {
     ev.preventDefault();
     if (imageFile.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return; }
     toast("图片处理中…", "ok");
-    const dataUrl = await fileToCompressedDataUrl(imageFile, 1000, 0.75);
+    const dataUrl = await fileToCompressedDataUrl(imageFile, 1800, 0.88);
     if (!dataUrl) { toast("图片处理失败", "err"); return; }
     // 在光标位置插入图片 markdown
     const s = ta.selectionStart, e2 = ta.selectionEnd;
@@ -570,7 +570,7 @@ function insertImage(ta, refreshPreview, markDirty, saveContent) {
     if (!file || !file.type.startsWith("image/")) return;
     if (file.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return; }
     toast("图片处理中…", "ok");
-    const dataUrl = await fileToCompressedDataUrl(file, 1000, 0.75);
+    const dataUrl = await fileToCompressedDataUrl(file, 1800, 0.88);
     if (!dataUrl) { toast("图片处理失败", "err"); return; }
     insertAtCursor(ta, `\n![图片](${dataUrl})\n`);
     refreshPreview(); markDirty(); saveContent();

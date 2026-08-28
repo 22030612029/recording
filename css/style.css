@@ -1306,15 +1306,18 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 :root[data-theme="dark"] img, .dark img { filter: brightness(0.92); }
 
 /* ============================================================
-   图片查看器（灯箱）：缩放、拖拽
+   图片查看器（弹窗形式）：缩放、拖拽
    ============================================================ */
 .kb-image-viewer {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.92);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
   animation: kbIvFadeIn 0.2s ease;
 }
 @keyframes kbIvFadeIn {
@@ -1322,13 +1325,19 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   to { opacity: 1; }
 }
 .kb-image-viewer-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(20, 20, 20, 0.95);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px 16px 0 0;
+  z-index: 2;
 }
 .kb-image-viewer-title {
   color: #fff;
@@ -1378,33 +1387,45 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   font-variant-numeric: tabular-nums;
 }
 .kb-image-viewer-stage {
-  flex: 1;
+  width: 100%;
+  max-width: 1100px;
+  height: calc(100vh - 160px);
+  max-height: 800px;
+  background: #1a1a1a;
+  border-radius: 0 0 16px 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   cursor: grab;
   position: relative;
+  margin-top: 60px;
 }
 .kb-image-viewer-stage:active {
   cursor: grabbing;
 }
 .kb-image-viewer-img {
-  max-width: 90%;
-  max-height: 85%;
+  max-width: 95%;
+  max-height: 90%;
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
   transition: transform 0.08s ease-out;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
-  border-radius: 4px;
 }
 .kb-image-viewer-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
   text-align: center;
-  padding: 10px 20px;
-  color: rgba(255,255,255,0.5);
+  padding: 6px 16px;
+  color: rgba(255,255,255,0.6);
   font-size: 12px;
-  background: rgba(0,0,0,0.4);
+  background: rgba(0,0,0,0.5);
+  border-radius: 20px;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 /* ============================================================
