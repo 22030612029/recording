@@ -24,6 +24,43 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+/* ---------- 块级编辑器辅助（Notebook 风格） ---------- */
+let _blockIdCounter = 0;
+function genBlockId() { return "b_" + (++_blockIdCounter) + "_" + Date.now().toString(36); }
+
+/* 将 Markdown content 解析为块数组（文本块 + 图片块） */
+function parseBlocks(content) {
+  const blocks = [];
+  if (!content) return blocks;
+  const lines = content.split("\n");
+  let textBuf = [];
+  const flushText = () => {
+    if (textBuf.length > 0) {
+      blocks.push({ id: genBlockId(), type: "text", content: textBuf.join("\n") });
+      textBuf = [];
+    }
+  };
+  for (const line of lines) {
+    const imgMatch = line.match(/^!\[([^\]]*)\]\(([^)\s]+)\)\s*$/);
+    if (imgMatch) {
+      flushText();
+      blocks.push({ id: genBlockId(), type: "image", alt: imgMatch[1] || "图片", src: imgMatch[2] });
+    } else {
+      textBuf.push(line);
+    }
+  }
+  flushText();
+  return blocks;
+}
+
+/* 将块数组序列化为 Markdown content */
+function serializeBlocks(blocks) {
+  return blocks.map((b) => {
+    if (b.type === "image") return `![${b.alt || "图片"}](${b.src})`;
+    return b.content || "";
+  }).join("\n\n");
+}
+
 /* ---------- LaTeX 公式（KaTeX，本地内置、动态加载） ---------- */
 let katexPromise = null;
 function ensureKatex() {
@@ -440,141 +477,229 @@ function renderEditor(editor) {
     return;
   }
 
-  // note 编辑
+  // note 编辑 — Notebook 风格块级编辑器
   const vm = state.viewMode;
+  let blocks = parseBlocks(node.content || "");
+  if (blocks.length === 0) blocks = [{ id: genBlockId(), type: "text", content: "" }];
+
   editor.innerHTML = `
     <div class="kb-editor-top">
       <input class="kb-title-input" id="kbTitle" value="${esc(node.title)}" placeholder="笔记标题" />
       <div class="kb-meta muted">创建 ${fmtTime(node.createdAt)} · 更新 ${fmtTime(node.updatedAt)}</div>
     </div>
-    <div class="kb-mdbar">
-      <button data-md="bold" title="加粗">B</button>
-      <button data-md="italic" title="斜体"><em>I</em></button>
-      <button data-md="strike" title="删除线"><s>S</s></button>
-      <button data-md="h2" title="二级标题">H</button>
-      <button data-md="quote" title="引用">❝</button>
-      <button data-md="ul" title="无序列表">• 列表</button>
-      <button data-md="ol" title="有序列表">1. 列表</button>
-      <button data-md="code" title="代码">&lt;/&gt;</button>
-      <button data-md="link" title="链接">🔗</button>
-      <button data-md="image" title="插入图片">🖼</button>
-      <button data-md="table" title="表格">≡ 表格</button>
-      <button data-md="math" title="块级公式">Σ 公式</button>
-      <button data-md="mathi" title="行内公式">$x$</button>
+    <div class="kb-block-toolbar">
+      <button class="btn btn-ghost btn-sm" data-add="text" type="button">+ 文本块</button>
+      <button class="btn btn-ghost btn-sm" data-add="image" type="button">+ 图片块</button>
+      <button class="btn btn-primary btn-sm" id="kbSaveBtn" type="button">💾 保存</button>
       <span class="kb-mode">
-        <button data-mode="split" class="${vm === "split" ? "on" : ""}">分屏</button>
         <button data-mode="edit" class="${vm === "edit" ? "on" : ""}">编辑</button>
         <button data-mode="preview" class="${vm === "preview" ? "on" : ""}">预览</button>
       </span>
     </div>
     <div class="kb-editor-body mode-${vm}">
-      <textarea class="kb-textarea" id="kbText" placeholder="用 Markdown 写笔记…
-# 标题
-- 列表
-行内代码：前后各一个反引号
-**加粗**">${esc(node.content || "")}</textarea>
+      <div class="kb-blocks" id="kbBlocks"></div>
       <div class="kb-preview markdown-body" id="kbPreview"></div>
     </div>
-    <div class="kb-savebar"><span class="kb-save-dot" id="kbSaveDot"></span><span id="kbSaveState">已保存</span></div>
+    <div class="kb-savebar">
+      <span class="kb-save-dot" id="kbSaveDot"></span>
+      <span id="kbSaveState">已保存</span>
+      <span class="kb-auto-save">自动保存 · 10秒</span>
+    </div>
   `;
 
   const e = editor;
-  const ta = e.querySelector("#kbText");
+  const blocksEl = e.querySelector("#kbBlocks");
   const pv = e.querySelector("#kbPreview");
   const dot = e.querySelector("#kbSaveDot");
   const saveState = e.querySelector("#kbSaveState");
 
-  const refreshPreview = () => { pv.innerHTML = mdToHtml(ta.value); };
   const markDirty = (label) => { dot.classList.add("dirty"); saveState.textContent = label || "编辑中…"; };
   const markSaved = (t) => { dot.classList.remove("dirty"); saveState.textContent = t || "已保存"; };
 
-  // 预览初始
+  /* 渲染单个块 */
+  function renderBlock(b, idx) {
+    if (b.type === "image") {
+      return `<div class="kb-block kb-block-image" data-block-id="${b.id}" data-block-type="image">
+        <div class="kb-block-actions">
+          <button data-action="up" title="上移" ${idx === 0 ? "disabled" : ""}>↑</button>
+          <button data-action="down" title="下移" ${idx === blocks.length - 1 ? "disabled" : ""}>↓</button>
+          <button data-action="delete" title="删除">×</button>
+        </div>
+        <div class="kb-block-image-wrap">
+          <img src="${b.src}" alt="${esc(b.alt || "")}" />
+          <input class="kb-block-caption" type="text" placeholder="图片说明（可选）" value="${esc(b.alt || "")}" />
+        </div>
+      </div>`;
+    }
+    return `<div class="kb-block kb-block-text" data-block-id="${b.id}" data-block-type="text">
+      <div class="kb-block-actions">
+        <button data-action="up" title="上移" ${idx === 0 ? "disabled" : ""}>↑</button>
+        <button data-action="down" title="下移" ${idx === blocks.length - 1 ? "disabled" : ""}>↓</button>
+        <button data-action="delete" title="删除">×</button>
+      </div>
+      <textarea class="kb-block-text" placeholder="输入文本内容，支持 Markdown 语法…" rows="1">${esc(b.content || "")}</textarea>
+    </div>`;
+  }
+
+  /* 渲染所有块 */
+  function renderBlocks() {
+    blocksEl.innerHTML = blocks.map((b, i) => renderBlock(b, i)).join("");
+    // 文本块自动高度
+    blocksEl.querySelectorAll(".kb-block-text").forEach((ta) => {
+      ta.style.height = "auto";
+      ta.style.height = Math.max(ta.scrollHeight, 40) + "px";
+    });
+  }
+
+  /* 刷新预览 */
+  function refreshPreview() { pv.innerHTML = mdToHtml(serializeBlocks(blocks)); }
+
+  /* 保存到 store */
+  function doSave() {
+    const content = serializeBlocks(blocks);
+    store.updateKbNode(node.id, { content });
+    markSaved();
+    const meta = e.querySelector(".kb-meta");
+    if (meta) meta.textContent = `创建 ${fmtTime(node.createdAt)} · 更新 ${fmtTime(Date.now())}`;
+  }
+
+  /* 10秒防抖自动保存 */
+  let autoSaveTimer = null;
+  function scheduleAutoSave() {
+    markDirty();
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(doSave, 10000);
+  }
+
+  renderBlocks();
   refreshPreview();
-  // KaTeX 加载完成后重渲染（公式从回退文本变为真正的数学排版）
   ensureKatex().then(() => { if (pv.isConnected) refreshPreview(); }).catch(() => {});
 
-  // 自动保存（400ms 防抖）
-  const saveContent = () => {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      store.updateKbNode(node.id, { content: ta.value });
-      markSaved();
-      const meta = e.querySelector(".kb-meta");
-      if (meta) meta.textContent = `创建 ${fmtTime(node.createdAt)} · 更新 ${fmtTime(Date.now())}`;
-    }, 400);
-  };
-  ta.addEventListener("input", () => { refreshPreview(); markDirty(); saveContent(); });
+  /* 块操作事件委托 */
+  blocksEl.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-action]");
+    if (!btn) return;
+    const blockEl = btn.closest(".kb-block");
+    if (!blockEl) return;
+    const blockId = blockEl.dataset.blockId;
+    const idx = blocks.findIndex((b) => b.id === blockId);
+    if (idx < 0) return;
+    const action = btn.dataset.action;
+    if (action === "up" && idx > 0) {
+      [blocks[idx - 1], blocks[idx]] = [blocks[idx], blocks[idx - 1]];
+      renderBlocks(); scheduleAutoSave();
+    } else if (action === "down" && idx < blocks.length - 1) {
+      [blocks[idx], blocks[idx + 1]] = [blocks[idx + 1], blocks[idx]];
+      renderBlocks(); scheduleAutoSave();
+    } else if (action === "delete") {
+      if (blocks.length <= 1) { toast("至少保留一个块", "err"); return; }
+      blocks.splice(idx, 1);
+      renderBlocks(); refreshPreview(); scheduleAutoSave();
+    }
+  });
 
-  // 直接粘贴图片
-  ta.addEventListener("paste", async (ev) => {
+  /* 文本块输入 */
+  blocksEl.addEventListener("input", (ev) => {
+    const ta = ev.target.closest(".kb-block-text");
+    if (!ta) return;
+    const blockEl = ta.closest(".kb-block");
+    const blockId = blockEl?.dataset.blockId;
+    const b = blocks.find((x) => x.id === blockId);
+    if (b) { b.content = ta.value; }
+    // 自动高度
+    ta.style.height = "auto";
+    ta.style.height = Math.max(ta.scrollHeight, 40) + "px";
+    refreshPreview();
+    scheduleAutoSave();
+  });
+
+  /* 图片块标题输入 */
+  blocksEl.addEventListener("input", (ev) => {
+    const caption = ev.target.closest(".kb-block-caption");
+    if (!caption) return;
+    const blockEl = caption.closest(".kb-block");
+    const blockId = blockEl?.dataset.blockId;
+    const b = blocks.find((x) => x.id === blockId);
+    if (b) { b.alt = caption.value; refreshPreview(); scheduleAutoSave(); }
+  });
+
+  /* 图片块粘贴/拖拽替换图片 */
+  blocksEl.addEventListener("paste", async (ev) => {
+    const imgWrap = ev.target.closest(".kb-block-image-wrap");
+    if (!imgWrap) return;
     const items = ev.clipboardData?.items;
     if (!items) return;
     for (const item of items) {
       if (item.type.startsWith("image/")) {
         ev.preventDefault();
         const file = item.getAsFile();
-        if (!file) return;
-        if (file.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return; }
+        if (!file || file.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return; }
         toast("图片处理中…", "ok");
         const dataUrl = await fileToCompressedDataUrl(file, 1000, 0.75);
         if (!dataUrl) { toast("图片处理失败", "err"); return; }
-        insertAtCursor(ta, `![图片](${dataUrl})\n`);
-        refreshPreview(); markDirty(); saveContent();
-        toast("已插入图片，自动切换预览模式", "ok");
-        // 自动切换到预览模式，避免看到长长的 base64
-        if (state.viewMode !== "preview") {
-          state.viewMode = "preview";
-          const body = e.querySelector(".kb-editor-body");
-          if (body) {
-            body.classList.remove("mode-edit", "mode-split");
-            body.classList.add("mode-preview");
-          }
-          e.querySelectorAll("[data-mode]").forEach(b => {
-            b.classList.toggle("on", b.dataset.mode === "preview");
-          });
-        }
+        const blockEl = imgWrap.closest(".kb-block");
+        const b = blocks.find((x) => x.id === blockEl?.dataset.blockId);
+        if (b) { b.src = dataUrl; renderBlocks(); refreshPreview(); scheduleAutoSave(); }
+        toast("图片已替换", "ok");
         return;
       }
     }
   });
 
-  // 标题自动保存
-  const titleInput = e.querySelector("#kbTitle");
-  const saveTitle = () => {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => { store.updateKbNode(node.id, { title: titleInput.value }); markSaved(); }, 500);
+  /* 添加块按钮 */
+  e.querySelector("[data-add=text]").onclick = () => {
+    blocks.push({ id: genBlockId(), type: "text", content: "" });
+    renderBlocks(); refreshPreview(); scheduleAutoSave();
+    // 聚焦新块
+    setTimeout(() => {
+      const textareas = blocksEl.querySelectorAll(".kb-block-text");
+      const last = textareas[textareas.length - 1];
+      if (last) last.focus();
+    }, 50);
   };
-  titleInput.addEventListener("input", () => { markDirty("标题编辑中…"); saveTitle(); });
-  titleInput.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); ta.focus(); } });
+  e.querySelector("[data-add=image]").onclick = () => {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      if (!file || !file.type.startsWith("image/")) return;
+      if (file.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return; }
+      toast("图片处理中…", "ok");
+      const dataUrl = await fileToCompressedDataUrl(file, 1000, 0.75);
+      if (!dataUrl) { toast("图片处理失败", "err"); return; }
+      blocks.push({ id: genBlockId(), type: "image", alt: "图片", src: dataUrl });
+      renderBlocks(); refreshPreview(); scheduleAutoSave();
+      toast("已添加图片块", "ok");
+    };
+    input.click();
+  };
 
-  // 工具栏
-  const toolActions = {
-    bold: () => wrapSelection(ta, "**", "**", "加粗文字"),
-    italic: () => wrapSelection(ta, "*", "*", "斜体文字"),
-    strike: () => wrapSelection(ta, "~~", "~~", "删除线文字"),
-    h2: () => prependLine(ta, "## "),
-    quote: () => prependLine(ta, "> "),
-    ul: () => prependLine(ta, "- "),
-    ol: () => prependLine(ta, "1. "),
-    code: () => wrapSelection(ta, "`", "`", "code"),
-    link: () => wrapSelection(ta, "[", "](https://)", "链接文字"),
-    table: () => {
-      const tpl = "\n| 列1 | 列2 | 列3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |\n";
-      insertAtCursor(ta, tpl);
-    },
-    image: () => insertImage(ta, refreshPreview, markDirty, saveContent, editor),
-    math: () => wrapSelection(ta, "\n$$\n", "\n$$\n", "\\frac{a}{b}"),
-    mathi: () => wrapSelection(ta, "$", "$", "x^2"),
+  /* 手动保存按钮 */
+  e.querySelector("#kbSaveBtn").onclick = () => {
+    clearTimeout(autoSaveTimer);
+    doSave();
+    toast("已保存", "ok");
   };
-  e.querySelectorAll("[data-md]").forEach((btn) => {
-    btn.onclick = () => { const fn = toolActions[btn.dataset.md]; if (fn) { fn(); ta.focus(); } };
+
+  /* 标题自动保存 */
+  const titleInput = e.querySelector("#kbTitle");
+  titleInput.addEventListener("input", () => {
+    markDirty("标题编辑中…");
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => {
+      store.updateKbNode(node.id, { title: titleInput.value });
+      markSaved();
+    }, 10000);
   });
 
-  // 模式切换
+  /* 模式切换 */
   e.querySelectorAll("[data-mode]").forEach((btn) => {
     btn.onclick = () => {
       state.viewMode = btn.dataset.mode;
-      renderEditor(editor); // 重渲染编辑器保持焦点数据
+      const body = e.querySelector(".kb-editor-body");
+      body.classList.remove("mode-edit", "mode-preview");
+      body.classList.add("mode-" + btn.dataset.mode);
+      e.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === btn.dataset.mode));
     };
   });
 }
