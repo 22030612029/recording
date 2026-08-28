@@ -12,7 +12,7 @@ const state = {
   selectedId: null,     // 当前选中节点 id
   expanded: new Set(),  // 已展开的文件夹 id
   q: "",                // 搜索词
-  viewMode: "split",    // split | edit | preview
+  viewMode: "preview",    // split | edit | preview
 };
 
 let saveTimer = null;
@@ -458,6 +458,27 @@ function renderEditor(editor) {
     }, 400);
   };
   ta.addEventListener("input", () => { refreshPreview(); markDirty(); saveContent(); });
+
+  // 直接粘贴图片
+  ta.addEventListener("paste", async (ev) => {
+    const items = ev.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        ev.preventDefault();
+        const file = item.getAsFile();
+        if (!file) return;
+        if (file.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return; }
+        toast("图片处理中…", "ok");
+        const dataUrl = await fileToCompressedDataUrl(file, 1000, 0.75);
+        if (!dataUrl) { toast("图片处理失败", "err"); return; }
+        insertAtCursor(ta, `![图片](${dataUrl})\n`);
+        refreshPreview(); markDirty(); saveContent();
+        toast("已插入图片", "ok");
+        return;
+      }
+    }
+  });
 
   // 标题自动保存
   const titleInput = e.querySelector("#kbTitle");
