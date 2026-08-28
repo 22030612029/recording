@@ -525,8 +525,13 @@ function renderEditor(editor) {
           <button data-action="down" title="下移" ${idx === blocks.length - 1 ? "disabled" : ""}>↓</button>
           <button data-action="delete" title="删除">×</button>
         </div>
-        <div class="kb-block-image-wrap">
-          <img src="${b.src}" alt="${esc(b.alt || "")}" />
+        <div class="kb-block-image-wrap" data-image-block>
+          <div class="kb-block-image-area">
+            <img src="${b.src}" alt="${esc(b.alt || "")}" />
+            <div class="kb-block-image-overlay">
+              <span class="kb-block-image-hint">📋 点击选择 / 拖拽 / Ctrl+V 粘贴替换</span>
+            </div>
+          </div>
           <input class="kb-block-caption" type="text" placeholder="图片说明（可选）" value="${esc(b.alt || "")}" />
         </div>
       </div>`;
@@ -623,27 +628,84 @@ function renderEditor(editor) {
     if (b) { b.alt = caption.value; refreshPreview(); scheduleAutoSave(); }
   });
 
-  /* 图片块粘贴/拖拽替换图片 */
+  /* 通用：处理图片文件并替换指定块 */
+  async function handleImageFile(file, blockId) {
+    if (!file || !file.type.startsWith("image/")) return false;
+    if (file.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return false; }
+    toast("图片处理中…", "ok");
+    const dataUrl = await fileToCompressedDataUrl(file, 1000, 0.75);
+    if (!dataUrl) { toast("图片处理失败", "err"); return false; }
+    const b = blocks.find((x) => x.id === blockId);
+    if (b) {
+      b.src = dataUrl;
+      renderBlocks();
+      refreshPreview();
+      scheduleAutoSave();
+      toast("图片已替换", "ok");
+      return true;
+    }
+    return false;
+  }
+
+  /* 图片块粘贴替换图片 */
   blocksEl.addEventListener("paste", async (ev) => {
     const imgWrap = ev.target.closest(".kb-block-image-wrap");
     if (!imgWrap) return;
     const items = ev.clipboardData?.items;
     if (!items) return;
+    // 同步获取文件（DataTransferItem 必须在同步上下文获取）
+    let imageFile = null;
     for (const item of items) {
       if (item.type.startsWith("image/")) {
-        ev.preventDefault();
-        const file = item.getAsFile();
-        if (!file || file.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return; }
-        toast("图片处理中…", "ok");
-        const dataUrl = await fileToCompressedDataUrl(file, 1000, 0.75);
-        if (!dataUrl) { toast("图片处理失败", "err"); return; }
-        const blockEl = imgWrap.closest(".kb-block");
-        const b = blocks.find((x) => x.id === blockEl?.dataset.blockId);
-        if (b) { b.src = dataUrl; renderBlocks(); refreshPreview(); scheduleAutoSave(); }
-        toast("图片已替换", "ok");
-        return;
+        imageFile = item.getAsFile();
+        break;
       }
     }
+    if (!imageFile) return;
+    ev.preventDefault(); // 阻止默认粘贴，避免 base64 字符出现在输入框
+    const blockEl = imgWrap.closest(".kb-block");
+    await handleImageFile(imageFile, blockEl?.dataset.blockId);
+  });
+
+  /* 图片块：点击选择图片 */
+  blocksEl.addEventListener("click", (ev) => {
+    const imgArea = ev.target.closest(".kb-block-image-area");
+    if (!imgArea) return;
+    const imgWrap = imgArea.closest(".kb-block-image-wrap");
+    const blockEl = imgWrap?.closest(".kb-block");
+    const blockId = blockEl?.dataset.blockId;
+    if (!blockId) return;
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      if (file) await handleImageFile(file, blockId);
+    };
+    input.click();
+  });
+
+  /* 图片块：拖拽上传 */
+  blocksEl.addEventListener("dragover", (ev) => {
+    const imgArea = ev.target.closest(".kb-block-image-area");
+    if (!imgArea) return;
+    ev.preventDefault();
+    imgArea.classList.add("drag-over");
+  });
+  blocksEl.addEventListener("dragleave", (ev) => {
+    const imgArea = ev.target.closest(".kb-block-image-area");
+    if (!imgArea) return;
+    imgArea.classList.remove("drag-over");
+  });
+  blocksEl.addEventListener("drop", async (ev) => {
+    const imgArea = ev.target.closest(".kb-block-image-area");
+    if (!imgArea) return;
+    ev.preventDefault();
+    imgArea.classList.remove("drag-over");
+    const imgWrap = imgArea.closest(".kb-block-image-wrap");
+    const blockEl = imgWrap?.closest(".kb-block");
+    const blockId = blockEl?.dataset.blockId;
+    const file = ev.dataTransfer?.files && ev.dataTransfer.files[0];
+    if (file && blockId) await handleImageFile(file, blockId);
   });
 
   /* 添加块按钮 */
