@@ -102,6 +102,15 @@ export function switchView(name) {
   // 顶部快捷按钮仅仪表盘可见（"录入试卷/添加目标院校"只在首页提供）
   const qb = document.getElementById("quickAddBtn");
   qb.style.display = name === "dashboard" ? "" : "none";
+
+  // 离开小窝页面时恢复侧边栏
+  if (name !== "diary") {
+    const sidebar = document.querySelector(".sidebar");
+    const appShell = document.querySelector(".app-shell");
+    sidebar?.classList.remove("diary-sidebar-hidden");
+    appShell?.classList.remove("diary-shell-full");
+  }
+
   const container = document.getElementById("view-" + name);
   container.scrollTop = 0;
   VIEWS[name].render(container);

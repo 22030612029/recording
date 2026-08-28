@@ -1609,6 +1609,51 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   margin-top: 10px;
 }
 .diary-char-count { font-size: 12px; color: var(--ink-mute); }
+.diary-editor-actions { display: flex; gap: 8px; }
+
+/* 保存状态 */
+.diary-save-state {
+  font-size: 12px; color: var(--ink-mute);
+  padding: 3px 10px; border-radius: 12px;
+  background: var(--surface-2);
+}
+.diary-save-state.dirty {
+  color: #e67e22;
+  background: rgba(230, 126, 34, 0.1);
+}
+
+/* 侧边栏切换按钮 */
+.diary-sidebar-toggle {
+  position: fixed;
+  top: 16px; left: 16px;
+  z-index: 100;
+  width: 40px; height: 40px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: all .2s ease;
+}
+.diary-sidebar-toggle:hover {
+  background: var(--surface-2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+/* 侧边栏隐藏（小窝沉浸模式） */
+.sidebar.diary-sidebar-hidden {
+  display: none !important;
+}
+.app-shell.diary-shell-full {
+  grid-template-columns: 1fr !important;
+}
+.app-shell.diary-shell-full .main-content {
+  border-left: none !important;
+}
 
 /* 心情时间线 */
 .diary-section-head {

@@ -46,6 +46,8 @@ export function renderDiary(container) {
 
   container.innerHTML = `
     <div class="diary-wrap">
+      <!-- 侧边栏切换按钮 -->
+      <button class="diary-sidebar-toggle" id="diarySidebarToggle" type="button" title="显示/隐藏导航栏">☰</button>
       <!-- 顶部暖心区 -->
       <div class="diary-hero">
         <div class="diary-hero-bg"></div>
@@ -99,7 +101,10 @@ export function renderDiary(container) {
         <textarea class="diary-textarea" id="diaryText" placeholder="今天学得怎么样？有什么收获、困惑或想对自己说的话？写下来吧～">${esc(todayDiary.content || "")}</textarea>
         <div class="diary-editor-foot">
           <span class="diary-char-count" id="diaryCharCount">${(todayDiary.content || "").length} 字</span>
-          <button class="btn btn-ghost btn-sm" id="diaryClearBtn">清空</button>
+          <div class="diary-editor-actions">
+            <button class="btn btn-ghost btn-sm" id="diaryClearBtn">清空</button>
+            <button class="btn btn-primary btn-sm" id="diarySaveBtn">💾 保存</button>
+          </div>
         </div>
       </div>
 
@@ -130,6 +135,12 @@ export function renderDiary(container) {
       </div>
     </div>
   `;
+
+  // 默认隐藏侧边栏（小窝沉浸模式）
+  const sidebar = document.querySelector(".sidebar");
+  const appShell = document.querySelector(".app-shell");
+  if (sidebar) sidebar.classList.add("diary-sidebar-hidden");
+  if (appShell) appShell.classList.add("diary-shell-full");
 
   bindEvents(container);
 }
@@ -162,24 +173,40 @@ function bindEvents(container) {
   const charCount = container.querySelector("#diaryCharCount");
   const moodPicker = container.querySelector("#diaryMoodPicker");
 
-  // 心情选择
+  // 侧边栏切换
+  const sidebarToggle = container.querySelector("#diarySidebarToggle");
+  if (sidebarToggle) {
+    sidebarToggle.onclick = () => {
+      const sidebar = document.querySelector(".sidebar");
+      const appShell = document.querySelector(".app-shell");
+      const isHidden = sidebar?.classList.toggle("diary-sidebar-hidden");
+      appShell?.classList.toggle("diary-shell-full", isHidden);
+      sidebarToggle.textContent = isHidden ? "☰" : "✕";
+      sidebarToggle.title = isHidden ? "显示导航栏" : "隐藏导航栏";
+    };
+  }
+
+  // 心情选择（标记未保存）
   moodPicker.querySelectorAll(".diary-mood-btn").forEach((btn) => {
     btn.onclick = () => {
       moodPicker.querySelectorAll(".diary-mood-btn").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       todayDiary.mood = btn.dataset.mood;
-      saveDiary(textarea, saveState);
+      markUnsaved(saveState);
     };
   });
 
-  // 文本输入（自动保存）
+  // 文本输入（标记未保存，不自动保存）
   textarea.addEventListener("input", () => {
     charCount.textContent = `${textarea.value.length} 字`;
-    saveState.textContent = "编辑中…";
-    saveState.classList.add("dirty");
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => saveDiary(textarea, saveState), 500);
+    markUnsaved(saveState);
   });
+
+  // 手动保存
+  container.querySelector("#diarySaveBtn").onclick = () => {
+    saveDiary(textarea, saveState);
+    toast("已保存", "ok");
+  };
 
   // 清空
   container.querySelector("#diaryClearBtn").onclick = async () => {
@@ -205,6 +232,14 @@ function bindEvents(container) {
       deleteDiaryItem(id, container);
     }
   };
+}
+
+/* ---------- 标记未保存 ---------- */
+function markUnsaved(saveState) {
+  if (saveState) {
+    saveState.textContent = "未保存 ●";
+    saveState.classList.add("dirty");
+  }
 }
 
 /* ---------- 保存日记 ---------- */
