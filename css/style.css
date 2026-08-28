@@ -864,37 +864,66 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   .app-shell { display: block; }
   .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0;
-    width: 64px; z-index: 40;
-    padding: 22px 8px;
+    width: 68px; z-index: 40;
+    padding: 20px 10px;
     overflow: hidden;
-    transition: width .26s cubic-bezier(.3,.8,.3,1), box-shadow .26s ease, padding .26s ease;
+    border-right: none;
+    background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+    transition: width .28s cubic-bezier(.3,.8,.3,1), box-shadow .28s ease, padding .28s ease;
   }
-  .main-wrap { margin-left: 64px; }
+  .main-wrap { margin-left: 68px; }
   .sidebar:hover {
-    width: 232px;
-    padding: 22px 14px;
-    box-shadow: 6px 0 32px rgba(27,42,78,0.10);
+    width: 236px;
+    padding: 20px 14px;
+    box-shadow: 8px 0 40px rgba(27,42,78,0.12);
+    border-right: 1px solid var(--line);
   }
-  /* 收起态：只保留图标/状态点，文字隐藏 */
-  .sidebar .brand { justify-content: center; padding: 6px 0 18px; }
+  /* brand 收起态居中 */
+  .sidebar .brand { justify-content: center; padding: 4px 0 20px; gap: 0; }
+  .sidebar .brand-mark { width: 42px; height: 42px; font-size: 26px; border-radius: 14px; }
+  .sidebar:hover .brand { justify-content: flex-start; padding: 4px 8px 20px; gap: 12px; }
+  .sidebar:hover .brand-mark { width: 46px; height: 46px; font-size: 30px; border-radius: 12px; }
+  /* 文字收起/展开 */
   .sidebar .brand-text,
   .sidebar .nav-label,
   .sidebar .sidebar-foot .storage-meta,
   .sidebar .user-logout {
     opacity: 0; width: 0; overflow: hidden; white-space: nowrap;
-    transition: opacity .18s ease;
+    transition: opacity .2s ease;
   }
-  .sidebar .nav-item { justify-content: center; padding: 11px; }
-  .sidebar .sidebar-foot { justify-content: center; gap: 0; }
-  /* hover 展开态：文字渐显 */
-  .sidebar:hover .brand { justify-content: flex-start; padding: 6px 8px 18px; }
   .sidebar:hover .brand-text,
   .sidebar:hover .nav-label,
   .sidebar:hover .sidebar-foot .storage-meta,
   .sidebar:hover .user-logout {
     opacity: 1; width: auto;
-    transition: opacity .22s ease .06s;
+    transition: opacity .24s ease .08s;
   }
-  .sidebar:hover .nav-item { justify-content: flex-start; padding: 11px 14px; }
-  .sidebar:hover .sidebar-foot { justify-content: flex-start; gap: 8px; }
+  /* 导航项收起态：居中、圆润 */
+  .sidebar .nav-list { gap: 6px; }
+  .sidebar .nav-item {
+    justify-content: center; padding: 12px 0;
+    border-radius: 12px;
+    position: relative;
+    font-size: 14px;
+  }
+  .sidebar .nav-ico { font-size: 19px; width: 24px; }
+  .sidebar:hover .nav-item { justify-content: flex-start; padding: 11px 14px; border-radius: var(--r-sm); }
+  /* 选中项左侧指示条 */
+  .sidebar .nav-item.active::before {
+    content: ""; position: absolute; left: -10px; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 22px; background: var(--accent); border-radius: 0 3px 3px 0;
+  }
+  .sidebar:hover .nav-item.active::before { left: -14px; }
+  /* 底部用户区收起态 */
+  .sidebar .sidebar-foot { justify-content: center; gap: 0; padding: 12px 0; border-top: 1px solid var(--line); margin-top: 8px; }
+  .sidebar:hover .sidebar-foot { justify-content: flex-start; gap: 8px; padding: 10px 12px; }
+  /* 顶部栏更紧凑通透 */
+  .topbar { padding: 12px 28px; background: rgba(250,246,238,0.78); backdrop-filter: blur(14px); }
+  .topbar-title { font-size: 21px; }
+  /* 内容区大屏更宽、留白更舒适 */
+  .content { max-width: 1280px; padding: 28px; }
+}
+/* 超宽屏进一步放宽 */
+@media (min-width: 1600px) {
+  .content { max-width: 1400px; padding: 32px; }
 }
