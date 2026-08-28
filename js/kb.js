@@ -60,10 +60,20 @@ function renderMath(text) {
     try { return `<div class="math-block">${window.katex.renderToString(expr.trim(), { displayMode: true, throwOnError: false })}</div>`; }
     catch { return `<div class="math-block math-fallback">$$${escapeHtml(expr)}$$</div>`; }
   });
+  // 块级 \[...\]
+  text = text.replace(/\\\[([\s\S]+?)\\\]/g, (_, expr) => {
+    try { return `<div class="math-block">${window.katex.renderToString(expr.trim(), { displayMode: true, throwOnError: false })}</div>`; }
+    catch { return `<div class="math-block math-fallback">\\[${escapeHtml(expr)}\\]</div>`; }
+  });
   // 行内 $...$
   text = text.replace(/(^|[^\\])\$([^\n$]+?)\$/g, (_, pre, expr) => {
     try { return pre + `<span class="math-inline">${window.katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false })}</span>`; }
     catch { return pre + `$${escapeHtml(expr)}$`; }
+  });
+  // 行内 \(...\)
+  text = text.replace(/\\\(([\s\S]+?)\\\)/g, (_, expr) => {
+    try { return `<span class="math-inline">${window.katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false })}</span>`; }
+    catch { return `\\(${escapeHtml(expr)}\\)`; }
   });
   return text;
 }
