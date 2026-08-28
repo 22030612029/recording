@@ -246,8 +246,40 @@ function fmtTime(ts) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/* ---------- 快捷键 ---------- */
+let _kbShortcutsBound = false;
+function initKbShortcuts(container) {
+  if (_kbShortcutsBound) return;
+  _kbShortcutsBound = true;
+  document.addEventListener("keydown", (e) => {
+    // 只在知识库页面生效
+    const view = document.getElementById("view-kb");
+    if (!view || view.hidden) return;
+    // 避免在输入框/textarea中触发单键快捷键
+    const inInput = e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable;
+    // Ctrl+Shift+N：新建笔记（任何位置都可触发）
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "n") {
+      e.preventDefault();
+      document.getElementById("kbAddNote")?.click();
+      return;
+    }
+    // N 键：新建笔记（仅当焦点不在输入框时）
+    if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "n") {
+      e.preventDefault();
+      document.getElementById("kbAddNote")?.click();
+    }
+    // F 键：聚焦搜索框（仅当焦点不在输入框时）
+    if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      const search = document.getElementById("kbSearch");
+      if (search) { search.focus(); search.select(); }
+    }
+  });
+}
+
 /* ---------- 主渲染 ---------- */
 export function renderKnowledgeBase(container) {
+  initKbShortcuts(container);
   // 清理失效选中（被删或搜索无结果）
   if (state.selectedId && !nodeById(state.selectedId)) state.selectedId = null;
   const data = store.getData();
@@ -290,8 +322,15 @@ export function renderKnowledgeBase(container) {
   renderEditor(editor);
 
   // 事件
-  container.querySelector("#kbAddNote").onclick = () => { const n = store.addKbNode({ type: "note", parentId: state.selectedId && nodeById(state.selectedId)?.type === "folder" ? state.selectedId : null }); state.selectedId = n.id; state.expanded.add(n.parentId || "root"); renderKnowledgeBase(container); selectEditorFocus(editor, n.id); };
-  container.querySelector("#kbAddFolder").onclick = () => { const n = store.addKbNode({ type: "folder", parentId: state.selectedId && nodeById(state.selectedId)?.type === "folder" ? state.selectedId : null }); state.selectedId = n.id; state.expanded.add(n.parentId || "root"); renderKnowledgeBase(container); };
+  container.querySelector("#kbAddNote").onclick = () => {
+    const parentId = state.selectedId && nodeById(state.selectedId)?.type === "folder" ? state.selectedId : null;
+    const n = store.addKbNode({ type: "note", parentId, title: defaultNoteTitle() });
+    state.selectedId = n.id; state.expanded.add(n.parentId || "root");
+    renderKnowledgeBase(container);
+    const newEditor = container.querySelector("#kbEditor");
+    selectEditorFocus(newEditor, n.id);
+  };
+  container.querySelector("#kbAddFolder").onclick = () => { const n = store.addKbNode({ type: "folder", parentId: state.selectedId && nodeById(state.selectedId)?.type === "folder" ? state.selectedId : null, title: "新建文件夹" }); state.selectedId = n.id; state.expanded.add(n.parentId || "root"); renderKnowledgeBase(container); };
   const search = container.querySelector("#kbSearch");
   search.oninput = (e) => {
     state.q = e.target.value.trim();
@@ -371,8 +410,14 @@ function renderEditor(editor) {
       <div class="kb-editor-empty">
         <div class="empty-ico">📚</div>
         <h3>选择或新建一篇笔记</h3>
-        <p>左侧为目录，点「+ 新建笔记」或点选已有笔记开始编辑。<br/>支持 Markdown 语法，内容自动保存。</p>
+        <p>左侧为目录，点「+ 新建笔记」或点选已有笔记开始编辑。<br/>支持 Markdown 语法，内容自动保存。快捷键 <kbd>Ctrl</kbd>+<kbd>N</kbd> 快速创建</p>
+        <div style="margin-top:18px;display:flex;gap:10px;justify-content:center">
+          <button class="btn btn-primary" id="kbEmptyAddNote" type="button">✎ 新建笔记</button>
+          <button class="btn btn-ghost" id="kbEmptyAddFolder" type="button">📁 新建文件夹</button>
+        </div>
       </div>`;
+    editor.querySelector("#kbEmptyAddNote").onclick = () => { document.getElementById("kbAddNote")?.click(); };
+    editor.querySelector("#kbEmptyAddFolder").onclick = () => { document.getElementById("kbAddFolder")?.click(); };
     return;
   }
   if (node.type === "folder") {
@@ -559,8 +604,35 @@ async function insertImage(ta, refreshPreview, markDirty, saveContent) {
   input.click();
 }
 function selectEditorFocus(editor, id) {
-  const ta = editor.querySelector("#kbText");
-  if (ta) setTimeout(() => ta.focus(), 30);
+  // 新创建的笔记：聚焦标题并全选，方便直接重命名
+  const tryFocus = () => {
+    const titleInput = editor.querySelector("#kbTitle");
+    if (titleInput) {
+      titleInput.focus();
+      titleInput.select();
+      return true;
+    }
+    const ta = editor.querySelector("#kbText");
+    if (ta) { ta.focus(); return true; }
+    return false;
+  };
+  // 多次尝试，确保DOM渲染完成
+  if (!tryFocus()) {
+    requestAnimationFrame(() => { if (!tryFocus()) setTimeout(tryFocus, 50); });
+  }
+}
+
+/* 生成默认笔记标题：日期 + 序号 */
+function defaultNoteTitle() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  const dateStr = `${y}-${m}-${d}`;
+  // 检查今天已有多少篇笔记，生成序号
+  const todayNotes = store.listKb().filter(n => n.type === "note" && n.title?.startsWith(dateStr));
+  const num = todayNotes.length + 1;
+  return `${dateStr} 笔记${num > 1 ? ` ${num}` : ""}`;
 }
 
 /* ---------- 树操作 ---------- */
