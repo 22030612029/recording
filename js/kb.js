@@ -402,7 +402,14 @@ function bindEditorEvents(editor, container) {
   const note = store.getKbNode(state.selectedId);
   if (!note) return;
 
-  const refreshPreview = () => { pv.innerHTML = mdToHtml(ta.value); };
+  const refreshPreview = () => {
+    pv.innerHTML = mdToHtml(ta.value);
+    // 绑定图片点击事件（打开图片查看器）
+    pv.querySelectorAll("img").forEach((img) => {
+      img.style.cursor = "zoom-in";
+      img.onclick = () => openImageViewer(img.src, img.alt);
+    });
+  };
   const markDirty = (label) => { dot.classList.add("dirty"); saveState.textContent = label || "编辑中…"; };
   const markSaved = (t) => { dot.classList.remove("dirty"); saveState.textContent = t || "已保存"; };
 
@@ -570,4 +577,156 @@ function insertImage(ta, refreshPreview, markDirty, saveContent) {
     toast("已插入图片", "ok");
   };
   input.click();
+}
+
+/* ---------- 图片查看器（灯箱）：支持缩放、拖拽 ---------- */
+let imageViewerState = null;
+
+function openImageViewer(src, alt) {
+  // 移除已存在的查看器
+  closeImageViewer();
+
+  const viewer = document.createElement("div");
+  viewer.className = "kb-image-viewer";
+  viewer.id = "kbImageViewer";
+  viewer.innerHTML = `
+    <div class="kb-image-viewer-toolbar">
+      <span class="kb-image-viewer-title">${esc(alt || "图片预览")}</span>
+      <div class="kb-image-viewer-actions">
+        <button class="kb-iv-btn" data-action="zoom-out" title="缩小 (-)">−</button>
+        <span class="kb-iv-zoom" id="kbIvZoom">100%</span>
+        <button class="kb-iv-btn" data-action="zoom-in" title="放大 (+)">+</button>
+        <button class="kb-iv-btn" data-action="reset" title="重置 (0)">⟲</button>
+        <button class="kb-iv-btn kb-iv-close" data-action="close" title="关闭 (ESC)">✕</button>
+      </div>
+    </div>
+    <div class="kb-image-viewer-stage" id="kbIvStage">
+      <img class="kb-image-viewer-img" id="kbIvImg" src="${src}" alt="${esc(alt || "")}" draggable="false" />
+    </div>
+    <div class="kb-image-viewer-hint">滚轮缩放 · 拖拽移动 · ESC 关闭</div>
+  `;
+  document.body.appendChild(viewer);
+
+  // 状态
+  imageViewerState = {
+    scale: 1,
+    translateX: 0,
+    translateY: 0,
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    viewer,
+    img: viewer.querySelector("#kbIvImg"),
+    stage: viewer.querySelector("#kbIvStage"),
+    zoomLabel: viewer.querySelector("#kbIvZoom"),
+  };
+
+  const st = imageViewerState;
+
+  // 更新变换
+  function updateTransform() {
+    st.img.style.transform = `translate(${st.translateX}px, ${st.translateY}px) scale(${st.scale})`;
+    st.zoomLabel.textContent = Math.round(st.scale * 100) + "%";
+  }
+
+  // 缩放
+  function zoom(delta, centerX, centerY) {
+    const oldScale = st.scale;
+    const newScale = Math.max(0.1, Math.min(8, st.scale + delta));
+    if (centerX !== undefined) {
+      // 以鼠标位置为中心缩放
+      const rect = st.stage.getBoundingClientRect();
+      const cx = centerX - rect.left - rect.width / 2;
+      const cy = centerY - rect.top - rect.height / 2;
+      st.translateX = cx - (cx - st.translateX) * (newScale / oldScale);
+      st.translateY = cy - (cy - st.translateY) * (newScale / oldScale);
+    }
+    st.scale = newScale;
+    updateTransform();
+  }
+
+  // 重置
+  function resetView() {
+    st.scale = 1;
+    st.translateX = 0;
+    st.translateY = 0;
+    updateTransform();
+  }
+
+  // 工具栏按钮
+  viewer.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const action = btn.dataset.action;
+      if (action === "zoom-in") zoom(0.2);
+      else if (action === "zoom-out") zoom(-0.2);
+      else if (action === "reset") resetView();
+      else if (action === "close") closeImageViewer();
+    };
+  });
+
+  // 滚轮缩放
+  st.stage.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    zoom(delta, e.clientX, e.clientY);
+  }, { passive: false });
+
+  // 拖拽移动
+  st.stage.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    st.isDragging = true;
+    st.startX = e.clientX - st.translateX;
+    st.startY = e.clientY - st.translateY;
+    st.stage.style.cursor = "grabbing";
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!st || !st.isDragging) return;
+    st.translateX = e.clientX - st.startX;
+    st.translateY = e.clientY - st.startY;
+    updateTransform();
+  });
+  document.addEventListener("mouseup", () => {
+    if (!st) return;
+    st.isDragging = false;
+    if (st.stage) st.stage.style.cursor = "grab";
+  });
+
+  // 点击背景关闭
+  viewer.addEventListener("click", (e) => {
+    if (e.target === viewer || e.target === st.stage) closeImageViewer();
+  });
+
+  // 键盘快捷键
+  st._keyHandler = (e) => {
+    if (e.key === "Escape") closeImageViewer();
+    else if (e.key === "+" || e.key === "=") zoom(0.2);
+    else if (e.key === "-") zoom(-0.2);
+    else if (e.key === "0") resetView();
+  };
+  document.addEventListener("keydown", st._keyHandler);
+
+  // 图片加载完成后自适应大小
+  st.img.onload = () => {
+    const maxW = window.innerWidth * 0.85;
+    const maxH = window.innerHeight * 0.75;
+    const imgW = st.img.naturalWidth;
+    const imgH = st.img.naturalHeight;
+    if (imgW > maxW || imgH > maxH) {
+      const scale = Math.min(maxW / imgW, maxH / imgH);
+      st.scale = scale;
+      updateTransform();
+    }
+  };
+}
+
+function closeImageViewer() {
+  const viewer = document.getElementById("kbImageViewer");
+  if (viewer) viewer.remove();
+  if (imageViewerState) {
+    if (imageViewerState._keyHandler) {
+      document.removeEventListener("keydown", imageViewerState._keyHandler);
+    }
+    imageViewerState = null;
+  }
 }

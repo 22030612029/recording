@@ -1306,6 +1306,108 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 :root[data-theme="dark"] img, .dark img { filter: brightness(0.92); }
 
 /* ============================================================
+   图片查看器（灯箱）：缩放、拖拽
+   ============================================================ */
+.kb-image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  flex-direction: column;
+  animation: kbIvFadeIn 0.2s ease;
+}
+@keyframes kbIvFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.kb-image-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.kb-image-viewer-title {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kb-image-viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kb-iv-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-size: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .16s ease;
+  display: inline-grid;
+  place-items: center;
+}
+.kb-iv-btn:hover {
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,255,255,0.4);
+}
+.kb-iv-close {
+  background: rgba(220, 50, 50, 0.3);
+  border-color: rgba(220, 50, 50, 0.5);
+}
+.kb-iv-close:hover {
+  background: rgba(220, 50, 50, 0.5);
+  border-color: rgba(220, 50, 50, 0.8);
+}
+.kb-iv-zoom {
+  color: #fff;
+  font-size: 13px;
+  min-width: 50px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.kb-image-viewer-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: grab;
+  position: relative;
+}
+.kb-image-viewer-stage:active {
+  cursor: grabbing;
+}
+.kb-image-viewer-img {
+  max-width: 90%;
+  max-height: 85%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: transform 0.08s ease-out;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  border-radius: 4px;
+}
+.kb-image-viewer-hint {
+  text-align: center;
+  padding: 10px 20px;
+  color: rgba(255,255,255,0.5);
+  font-size: 12px;
+  background: rgba(0,0,0,0.4);
+}
+
+/* ============================================================
    图标按钮（搜索/主题切换）
    ============================================================ */
 .icon-btn {
