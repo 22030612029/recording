@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
    砚台 · 考研学习管理台
    学术清雅 · 浅色设计系统
    ============================================================ */
@@ -1046,6 +1046,100 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
   .kb-mdbar { padding: 8px 12px; }
   .kb-textarea, .kb-preview { padding: 16px; }
 }
+
+/* ============================================================
+   大屏沉浸模式：隐藏滚动条 + 知识库全屏布局
+   ============================================================ */
+/* 全局隐藏滚动条（保留滚轮/触控板滚动功能） */
+html, body { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+/* 知识库全屏布局 */
+#view-kb {
+  height: calc(100vh - var(--topbar-h, 60px));
+  overflow: hidden;
+  padding: 0 !important;
+}
+#view-kb .kb-layout {
+  height: 100%;
+}
+
+/* 左侧笔记列表可折叠 */
+.kb-sidebar {
+  transition: width .25s ease, transform .25s ease, opacity .25s ease;
+}
+.kb-sidebar.collapsed {
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(-20px);
+  border-right: none;
+}
+.kb-sidebar.collapsed * { visibility: hidden; }
+
+/* 折叠按钮 */
+.kb-toggle-sidebar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  color: var(--ink-2);
+  transition: all .16s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.kb-toggle-sidebar:hover {
+  background: var(--ink);
+  color: #f5efe0;
+  border-color: var(--ink);
+}
+
+/* 编辑器区域最大化 */
+.kb-editor-panel {
+  position: relative;
+}
+.kb-editor {
+  height: 100%;
+}
+
+/* 预览模式下更沉浸的阅读体验 */
+.kb-editor-body.mode-preview .kb-preview {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 48px;
+  line-height: 1.9;
+  font-size: 15.5px;
+}
+
+/* 工具栏在沉浸模式下更简洁 */
+.kb-mdbar {
+  background: transparent;
+  border-bottom: 1px solid var(--line);
+}
+
+/* 保存栏更轻量 */
+.kb-savebar {
+  background: transparent;
+  border-top: 1px solid var(--line);
+  padding: 6px 24px;
+}
+
+/* 响应式：小屏下不启用沉浸折叠 */
+@media (max-width: 768px) {
+  #view-kb { height: auto; min-height: calc(100vh - 60px); }
+  .kb-toggle-sidebar { display: none; }
+  .kb-sidebar.collapsed { width: 100%; max-height: 40vh; opacity: 1; transform: none; }
+  .kb-sidebar.collapsed * { visibility: visible; }
+}
+
 :root[data-theme="dark"] .kb-preview, .dark .kb-preview { background: var(--surface); }
 :root[data-theme="dark"] img, .dark img { filter: brightness(0.92); }
 

@@ -179,6 +179,7 @@ export function renderKnowledgeBase(container) {
 
       <!-- 右侧：编辑器 -->
       <main class="kb-editor-panel" id="kbEditorPanel">
+        <button class="kb-toggle-sidebar" id="kbToggleSidebar" type="button" title="折叠/展开笔记列表">☰</button>
         ${selectedNote ? renderEditor(selectedNote) : renderEmptyState()}
       </main>
     </div>
@@ -303,6 +304,17 @@ $$公式$$
 
 /* ---------- 事件绑定 ---------- */
 function bindEvents(container) {
+  // 折叠/展开侧边栏
+  const toggleBtn = container.querySelector("#kbToggleSidebar");
+  const sidebar = container.querySelector("#kbSidebar");
+  if (toggleBtn && sidebar) {
+    toggleBtn.onclick = () => {
+      sidebar.classList.toggle("collapsed");
+      toggleBtn.textContent = sidebar.classList.contains("collapsed") ? "📑" : "☰";
+      toggleBtn.title = sidebar.classList.contains("collapsed") ? "展开笔记列表" : "折叠笔记列表";
+    };
+  }
+
   // 新建笔记
   const newBtn = container.querySelector("#kbNewNote");
   if (newBtn) newBtn.onclick = () => {
