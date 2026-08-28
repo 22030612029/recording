@@ -8,6 +8,7 @@ import { renderPapers, openPaperForm, resetPapersFilter } from "./papers.js";
 import { renderKnowledge, resetKnowledgeFilter } from "./knowledge.js";
 import { renderKnowledgeBase } from "./kb.js";
 import { renderAnalysis } from "./analysis.js";
+import { renderDiary } from "./diary.js";
 import { renderMiniTrend, resizeAll } from "./charts.js";
 
 /* ---------- 工具导出（供其他模块使用） ---------- */
@@ -81,6 +82,7 @@ const VIEWS = {
   knowledge: { title: "错题与知识点", render: (c) => renderKnowledge(c) },
   kb: { title: "知识库", render: (c) => renderKnowledgeBase(c) },
   analysis: { title: "学情分析", render: (c) => renderAnalysis(c) },
+  diary: { title: "小窝", render: (c) => renderDiary(c) },
   settings: { title: "数据与设置", render: renderSettings },
 };
 let currentView = "dashboard";

@@ -22,6 +22,7 @@ function defaultData() {
     kpTypes: ["关键知识点", "薄弱环节", "复习建议"],
     tags: [], // 用户自定义标签
     kb: [], // 知识库（多级目录 + Markdown 笔记）
+    diaries: [], // 小窝日记
     targetScore: 90, // 总体目标百分比（保留，向后兼容）
     activeTargetId: "",
     targets: [], // 目标院校数组
@@ -60,6 +61,7 @@ export function load() {
       if (!Array.isArray(_data.knowledge)) _data.knowledge = [];
       if (!Array.isArray(_data.targets)) _data.targets = [];
       if (!Array.isArray(_data.kb)) _data.kb = [];
+      if (!Array.isArray(_data.diaries)) _data.diaries = [];
       if (!_data.activeTargetId && _data.targets.length) _data.activeTargetId = _data.targets[0].id;
 
       // —— 2026-08-22 迁移：科目键「专业课」统一改名为「408」 ——
@@ -721,6 +723,103 @@ export function getReviewStats() {
     if ((e.lastReview || 0) >= todayStart.getTime()) todayReviewed++;
   });
   return { due, total: _data.errors.length, completed, todayReviewed };
+}
+
+/* ---------- 小窝日记 ---------- */
+export const MOODS = [
+  { emoji: "😊", label: "开心" },
+  { emoji: "😌", label: "平静" },
+  { emoji: "🤔", label: "思考" },
+  { emoji: "💪", label: "奋斗" },
+  { emoji: "😴", label: "疲惫" },
+  { emoji: "😔", label: "低落" },
+  { emoji: "😤", label: "烦躁" },
+  { emoji: "🎉", label: "兴奋" },
+];
+
+export function listDiaries() {
+  if (!Array.isArray(_data.diaries)) _data.diaries = [];
+  return [..._data.diaries].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+}
+
+export function getDiaryByDate(date) {
+  return _data.diaries.find((d) => d.date === date) || null;
+}
+
+export function getDiary(id) {
+  return _data.diaries.find((d) => d.id === id) || null;
+}
+
+export function addDiary(data) {
+  const now = Date.now();
+  const date = data.date || todayISO();
+  // 同一天只允许一篇，存在则更新
+  const existing = getDiaryByDate(date);
+  if (existing) {
+    return updateDiary(existing.id, data);
+  }
+  const diary = {
+    id: uid("d"),
+    date,
+    content: (data.content || "").trim(),
+    mood: data.mood || "😌",
+    createdAt: now,
+    updatedAt: now,
+  };
+  _data.diaries.push(diary);
+  save();
+  return diary;
+}
+
+export function updateDiary(id, patch) {
+  const d = getDiary(id);
+  if (!d) return null;
+  if (patch.content != null) d.content = patch.content;
+  if (patch.mood != null) d.mood = patch.mood;
+  if (patch.date != null) d.date = patch.date;
+  d.updatedAt = Date.now();
+  save();
+  return d;
+}
+
+export function deleteDiary(id) {
+  _data.diaries = _data.diaries.filter((d) => d.id !== id);
+  save();
+}
+
+/* 日记统计：总天数、连续打卡、最近7天心情 */
+export function getDiaryStats() {
+  const diaries = listDiaries();
+  if (!diaries.length) return { totalDays: 0, streak: 0, recentMoods: [], totalWords: 0 };
+  const totalDays = diaries.length;
+  const totalWords = diaries.reduce((s, d) => s + (d.content?.length || 0), 0);
+  // 连续打卡：从今天或昨天开始往前数
+  const today = todayISO();
+  const dateSet = new Set(diaries.map((d) => d.date));
+  let streak = 0;
+  let cursor = new Date();
+  // 如果今天没写，从昨天开始算
+  if (!dateSet.has(today)) cursor.setDate(cursor.getDate() - 1);
+  while (dateSet.has(formatDateISO(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  // 最近7天心情
+  const recentMoods = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const diary = getDiaryByDate(formatDateISO(d));
+    recentMoods.push({ date: formatDateISO(d), mood: diary?.mood || null, hasDiary: !!diary });
+  }
+  return { totalDays, streak, recentMoods, totalWords };
+}
+
+function formatDateISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 // 初始化加载
