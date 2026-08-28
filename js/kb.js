@@ -370,11 +370,13 @@ function bindEvents(container) {
       if (deleteBtn) {
         e.stopPropagation();
         const id = deleteBtn.dataset.delete;
-        confirmBox("确定删除这篇笔记吗？", () => {
-          store.deleteKbNode(id);
-          if (state.selectedId === id) state.selectedId = null;
-          renderKnowledgeBase(container);
-          toast("已删除", "ok");
+        confirmBox("删除确认", "确定删除这篇笔记吗？此操作不可撤销。").then((ok) => {
+          if (ok) {
+            store.deleteKbNode(id);
+            if (state.selectedId === id) state.selectedId = null;
+            renderKnowledgeBase(container);
+            toast("已删除", "ok");
+          }
         });
         return;
       }
