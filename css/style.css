@@ -824,7 +824,39 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 }
 .markdown-body blockquote p { margin: .2em 0; }
 .markdown-body a { color: #a06f12; text-decoration: underline; text-underline-offset: 2px; }
-.markdown-body img { max-width: 100%; border-radius: 8px; margin: .4em 0; border: 1px solid var(--line); }
+.markdown-body .md-image-card {
+  display: block; max-width: 90%; margin: 1.2em auto;
+  padding: 12px 12px 10px; background: #fff;
+  border-radius: 14px; border: 1px solid var(--line);
+  box-shadow: 0 3px 12px rgba(27,42,78,0.08);
+  transition: transform .2s ease, box-shadow .2s ease;
+  text-align: center;
+}
+.markdown-body .md-image-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(27,42,78,0.15);
+}
+.markdown-body .md-image-card img {
+  display: block; max-width: 100%; margin: 0 auto;
+  border-radius: 8px; border: none; padding: 0;
+  box-shadow: none;
+}
+.markdown-body .md-image-card figcaption {
+  margin-top: 8px; font-size: 12.5px; color: var(--ink-mute);
+  font-style: italic; letter-spacing: 0.02em;
+}
+/* 兼容旧的直接 img 标签（非卡片形式） */
+.markdown-body img:not(.md-image-card img) {
+  display: block; max-width: 90%; margin: 1em auto;
+  padding: 10px; background: #fff;
+  border-radius: 12px; border: 1px solid var(--line);
+  box-shadow: 0 3px 10px rgba(27,42,78,0.08);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.markdown-body img:not(.md-image-card img):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(27,42,78,0.14);
+}
 .markdown-body hr { border: none; border-top: 1px dashed var(--line); margin: 1.2em 0; }
 .markdown-body table { border-collapse: collapse; margin: .7em 0; width: 100%; font-size: 13.5px; }
 .markdown-body th, .markdown-body td {

@@ -78,7 +78,8 @@ function inline(s) {
   s = s.replace(/`([^`\n]+)`/g, (m, c) => `<code>${c}</code>`);
   s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, src) => {
     if (!/^(https?:|data:image\/|\/)/i.test(src)) src = "#";
-    return `<img src="${src}" alt="${alt}" loading="lazy" />`;
+    const caption = alt ? escapeHtml(alt) : "图片";
+    return `<figure class="md-image-card"><img src="${src}" alt="${escapeHtml(alt)}" loading="lazy" /><figcaption>${caption}</figcaption></figure>`;
   });
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, url) => {
     if (!/^(https?:|mailto:)/i.test(url)) url = "#";
