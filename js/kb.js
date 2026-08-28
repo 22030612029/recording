@@ -454,14 +454,16 @@ function bindEditorEvents(editor, container) {
     toast("图片处理中…", "ok");
     const dataUrl = await fileToCompressedDataUrl(imageFile, 1800, 0.88);
     if (!dataUrl) { toast("图片处理失败", "err"); return; }
-    // 在光标位置插入图片 markdown
+    // 在光标位置插入图片 markdown + 总结提示
     const s = ta.selectionStart, e2 = ta.selectionEnd;
-    ta.value = ta.value.slice(0, s) + `\n![图片](${dataUrl})\n` + ta.value.slice(e2);
-    ta.selectionStart = ta.selectionEnd = s + dataUrl.length + 12;
+    const imgBlock = `\n![图片](${dataUrl})\n\n**📝 总结：**\n\n`;
+    ta.value = ta.value.slice(0, s) + imgBlock + ta.value.slice(e2);
+    // 将光标定位到总结后面，方便直接输入
+    ta.selectionStart = ta.selectionEnd = s + imgBlock.length;
     refreshPreview();
     markDirty();
     saveContent();
-    toast("已插入图片", "ok");
+    toast("已插入图片，可在下方写总结", "ok");
   });
 
   // 标题自动保存
@@ -572,9 +574,13 @@ function insertImage(ta, refreshPreview, markDirty, saveContent) {
     toast("图片处理中…", "ok");
     const dataUrl = await fileToCompressedDataUrl(file, 1800, 0.88);
     if (!dataUrl) { toast("图片处理失败", "err"); return; }
-    insertAtCursor(ta, `\n![图片](${dataUrl})\n`);
+    // 插入图片 + 总结提示
+    const s = ta.selectionStart, e2 = ta.selectionEnd;
+    const imgBlock = `\n![图片](${dataUrl})\n\n**📝 总结：**\n\n`;
+    ta.value = ta.value.slice(0, s) + imgBlock + ta.value.slice(e2);
+    ta.selectionStart = ta.selectionEnd = s + imgBlock.length;
     refreshPreview(); markDirty(); saveContent();
-    toast("已插入图片", "ok");
+    toast("已插入图片，可在下方写总结", "ok");
   };
   input.click();
 }
