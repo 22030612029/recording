@@ -1,7 +1,6 @@
 /* ============================================================
- * kb.js — 知识库（多级目录 + Markdown 笔记）
- * 树形目录（无限级）、Markdown 编辑/分屏预览、自动保存、
- * 时间记录、搜索、插图（复用压缩上传）、LaTeX 公式（内置 KaTeX）
+ * kb.js — 知识库（全新设计：卡片列表 + 简洁 Markdown 编辑器）
+ * 左侧笔记卡片列表、右侧编辑器、图片占位符、LaTeX、自动保存
  * ============================================================ */
 import { openModal, closeModal, toast, esc, confirmBox } from "./app.js";
 import * as store from "./storage.js";
@@ -9,10 +8,10 @@ import { fileToCompressedDataUrl } from "./knowledge.js";
 
 /* ---------- 模块状态 ---------- */
 const state = {
-  selectedId: null,     // 当前选中节点 id
-  expanded: new Set(),  // 已展开的文件夹 id
-  q: "",                // 搜索词
-  viewMode: "preview",    // split | edit | preview
+  selectedId: null,
+  q: "",
+  viewMode: "preview",  // split | edit | preview
+  categoryFilter: "all", // all | 分类名
 };
 
 let saveTimer = null;
@@ -24,41 +23,14 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-/* ---------- 块级编辑器辅助（Notebook 风格） ---------- */
-let _blockIdCounter = 0;
-function genBlockId() { return "b_" + (++_blockIdCounter) + "_" + Date.now().toString(36); }
-
-/* 将 Markdown content 解析为块数组（文本块 + 图片块） */
-function parseBlocks(content) {
-  const blocks = [];
-  if (!content) return blocks;
-  const lines = content.split("\n");
-  let textBuf = [];
-  const flushText = () => {
-    if (textBuf.length > 0) {
-      blocks.push({ id: genBlockId(), type: "text", content: textBuf.join("\n") });
-      textBuf = [];
-    }
-  };
-  for (const line of lines) {
-    const imgMatch = line.match(/^!\[([^\]]*)\]\(([^)\s]+)\)\s*$/);
-    if (imgMatch) {
-      flushText();
-      blocks.push({ id: genBlockId(), type: "image", alt: imgMatch[1] || "图片", src: imgMatch[2] });
-    } else {
-      textBuf.push(line);
-    }
-  }
-  flushText();
-  return blocks;
-}
-
-/* 将块数组序列化为 Markdown content */
-function serializeBlocks(blocks) {
-  return blocks.map((b) => {
-    if (b.type === "image") return `![${b.alt || "图片"}](${b.src})`;
-    return b.content || "";
-  }).join("\n\n");
+/* 提取摘要（纯文本前 N 字） */
+function extractSummary(content, maxLen = 80) {
+  if (!content) return "";
+  // 移除图片 markdown
+  let text = content.replace(/!\[([^\]]*)\]\([^)]+\)/g, "[图片]");
+  // 移除 markdown 符号
+  text = text.replace(/[#*>`_~\-]/g, "").replace(/\n+/g, " ").trim();
+  return text.length > maxLen ? text.substring(0, maxLen) + "…" : text;
 }
 
 /* ---------- LaTeX 公式（KaTeX，本地内置、动态加载） ---------- */
@@ -80,580 +52,364 @@ function ensureKatex() {
   return katexPromise;
 }
 
-function renderMath(tex, display) {
-  const fallback = () => display
-    ? `<div class="kb-math">${escapeHtml(tex)}</div>`
-    : `<span class="kb-math">${escapeHtml(tex)}</span>`;
-  if (typeof window.katex === "undefined") return fallback();
-  try {
-    return window.katex.renderToString(String(tex || "").trim(), {
-      throwOnError: false, displayMode: !!display,
-      strict: "ignore", trust: false, output: "html",
-    });
-  } catch (e) { return fallback(); }
+/* 渲染行内/块级公式（安全回退） */
+function renderMath(text) {
+  if (!window.katex) return text;
+  // 块级 $$...$$
+  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, expr) => {
+    try { return `<div class="math-block">${window.katex.renderToString(expr.trim(), { displayMode: true, throwOnError: false })}</div>`; }
+    catch { return `<div class="math-block math-fallback">$$${escapeHtml(expr)}$$</div>`; }
+  });
+  // 行内 $...$
+  text = text.replace(/(^|[^\\])\$([^\n$]+?)\$/g, (_, pre, expr) => {
+    try { return pre + `<span class="math-inline">${window.katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false })}</span>`; }
+    catch { return pre + `$${escapeHtml(expr)}$`; }
+  });
+  return text;
 }
 
-function inline(s) {
-  // 行内公式 $...$（在 HTML 转义之前提取，保证 LaTeX 原样传给 KaTeX）
-  const math = [];
-  s = String(s).replace(/(^|[^$\w])\$([^$\n]+?)\$(?![$\d])/g, (m, pre, tex) => {
-    math.push(renderMath(tex, false));
-    return pre + "\u0000M" + (math.length - 1) + "\u0000";
+/* ---------- Markdown → HTML ---------- */
+function mdToHtml(md) {
+  if (!md) return "";
+  let html = escapeHtml(md);
+  // 代码块 ```
+  html = html.replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${code}</code></pre>`);
+  // 行内代码
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // 图片 → 卡片
+  html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, src) =>
+    `<span class="md-image-card"><img src="${src}" alt="${alt}" /><span class="md-image-caption">${escapeHtml(alt)}</span></span>`);
+  // 链接
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // 标题
+  html = html.replace(/^###### (.+)$/gm, "<h6>$1</h6>");
+  html = html.replace(/^##### (.+)$/gm, "<h5>$1</h5>");
+  html = html.replace(/^#### (.+)$/gm, "<h4>$1</h4>");
+  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
+  html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
+  html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
+  // 引用
+  html = html.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>");
+  // 粗体、斜体、删除线
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  html = html.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+  // 无序列表
+  html = html.replace(/^[-*] (.+)$/gm, "<li>$1</li>");
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`);
+  // 有序列表
+  html = html.replace(/^\d+\. (.+)$/gm, "<li>$1</li>");
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ol>${m}</ol>`);
+  // 表格（简单）
+  html = html.replace(/^\|(.+)\|\n\|[-:| ]+\|\n((?:\|.+\|\n?)+)/gm, (_, header, body) => {
+    const ths = header.split("|").filter(Boolean).map(h => `<th>${h.trim()}</th>`).join("");
+    const trs = body.trim().split("\n").map(row => {
+      const tds = row.split("|").filter(Boolean).map(d => `<td>${d.trim()}</td>`).join("");
+      return `<tr>${tds}</tr>`;
+    }).join("");
+    return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
   });
-  // LaTeX 标准行内定界符 \(...\)
-  s = s.replace(/\\\(([^$\n]+?)\\\)/g, (m, tex) => {
-    math.push(renderMath(tex, false));
-    return "\u0000M" + (math.length - 1) + "\u0000";
-  });
-  // LaTeX 标准块级定界符 \[...\]（即使嵌在段落行内也按块级渲染）
-  s = s.replace(/\\\[([^$\n]+?)\\\]/g, (m, tex) => {
-    math.push(renderMath(tex, true));
-    return "\u0000M" + (math.length - 1) + "\u0000";
-  });
-  s = escapeHtml(s);
-  s = s.replace(/\u0000M(\d+)\u0000/g, (m, idx) => math[+idx] || "");
-  s = s.replace(/`([^`\n]+)`/g, (m, c) => `<code>${c}</code>`);
-  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, src) => {
-    if (!/^(https?:|data:image\/|\/)/i.test(src)) src = "#";
-    const caption = alt ? escapeHtml(alt) : "图片";
-    return `<figure class="md-image-card"><img src="${src}" alt="${escapeHtml(alt)}" loading="lazy" /><figcaption>${caption}</figcaption></figure>`;
-  });
-  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, url) => {
-    if (!/^(https?:|mailto:)/i.test(url)) url = "#";
-    return `<a href="${url}" target="_blank" rel="noopener">${t}</a>`;
-  });
-  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  s = s.replace(/~~([^~]+)~~/g, "<del>$1</del>");
-  s = s.replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<em>$2</em>");
-  return s;
+  // 段落
+  html = html.replace(/\n\n/g, "</p><p>");
+  html = "<p>" + html + "</p>";
+  // 清理空段落
+  html = html.replace(/<p><\/p>/g, "");
+  html = html.replace(/<p>\s*<\/p>/g, "");
+  // 公式
+  html = renderMath(html);
+  return html;
 }
 
-function parseRow(line) {
-  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((s) => s.trim());
-}
-
-function renderList(items) {
-  const stack = [{ indent: -1, children: [] }];
-  items.forEach((it) => {
-    const m = it.match(/^(\s*)([-*+]|\d+\.)\s+(.*)$/);
-    if (!m) return;
-    const indent = m[1].replace(/\t/g, "  ").length;
-    const ordered = /^\d+\./.test(m[2]);
-    let content = m[3];
-    const task = content.match(/^\[([ xX])\]\s+(.*)$/);
-    if (task) {
-      const done = task[1].toLowerCase() === "x";
-      content = `<label class="kb-task${done ? " done" : ""}"><input type="checkbox" disabled ${done ? "checked" : ""}/> ${inline(task[2])}</label>`;
-    } else {
-      content = inline(content);
-    }
-    const node = { indent, ordered, html: content, children: [] };
-    while (stack.length > 1 && stack[stack.length - 1].indent >= indent) stack.pop();
-    stack[stack.length - 1].children.push(node);
-    stack.push(node);
-  });
-  const render = (children) => {
-    if (!children.length) return "";
-    const tag = children[0].ordered ? "ol" : "ul";
-    return `<${tag}>${children.map((c) => `<li>${c.html}${render(c.children)}</li>`).join("")}</${tag}>`;
-  };
-  return render(stack[0].children);
-}
-
-export function mdToHtml(src) {
-  const lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
-  const out = [];
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    // 块级公式 $$...$$（可单行或多行包裹）
-    if (/^\s*\$\$/.test(line)) {
-      const one = line.match(/^\s*\$\$(.+?)\$\$\s*$/);
-      let tex;
-      if (one) { tex = one[1]; i++; }
-      else {
-        const buf = [];
-        const head = line.replace(/^\s*\$\$/, "");
-        if (head.trim()) buf.push(head);
-        i++;
-        while (i < lines.length && !/^\s*\$\$\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
-        if (i < lines.length) i++; // 跳过闭合 $$
-        tex = buf.join("\n");
-      }
-      out.push(renderMath(tex, true));
-      continue;
-    }
-    // 块级公式 \[...\]（LaTeX 标准写法，可单行或多行）
-    if (/^\s*\\\[/.test(line)) {
-      const one = line.match(/^\s*\\\[(.+?)\\\]\s*$/);
-      let tex;
-      if (one) { tex = one[1]; i++; }
-      else {
-        const buf = [];
-        const head = line.replace(/^\s*\\\[/, "");
-        if (head.trim()) buf.push(head);
-        i++;
-        while (i < lines.length && !/^\s*\\\]\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
-        if (i < lines.length) i++; // 跳过闭合 \]
-        tex = buf.join("\n");
-      }
-      out.push(renderMath(tex, true));
-      continue;
-    }
-    // 代码块
-    const fence = line.match(/^```\s*([\w-]*)\s*$/);
-    if (fence) {
-      const lang = fence[1];
-      const buf = [];
-      i++;
-      while (i < lines.length && !/^```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
-      i++;
-      out.push(`<pre><code${lang ? ` class="lang-${lang}"` : ""}>${buf.map(escapeHtml).join("\n")}</code></pre>`);
-      continue;
-    }
-    // 表格：当前行以 | 开头且下一行是分隔行
-    if (/^\s*\|.*\|\s*$/.test(line) && lines[i + 1] && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1]) && lines[i + 1].includes("-")) {
-      const header = parseRow(line);
-      i += 2;
-      const rows = [];
-      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(parseRow(lines[i])); i++; }
-      out.push(`<table><thead><tr>${header.map((h) => `<th>${inline(h)}</th>`).join("")}</tr></thead>` +
-        `<tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
-      continue;
-    }
-    // 水平线
-    if (/^\s*(---+|\*\*\*+|___+)\s*$/.test(line)) { out.push("<hr/>"); i++; continue; }
-    // 标题
-    const h = line.match(/^\s{0,3}(#{1,6})\s+(.*)$/);
-    if (h) { out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); i++; continue; }
-    // 引用（连续行）
-    if (/^\s*>\s?/.test(line)) {
-      const buf = [];
-      while (i < lines.length && /^\s*>\s?/.test(lines[i])) { buf.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
-      out.push(`<blockquote>${mdToHtml(buf.join("\n"))}</blockquote>`);
-      continue;
-    }
-    // 列表
-    if (/^\s*([-*+]|\d+\.)\s+/.test(line)) {
-      const items = [];
-      while (i < lines.length && (/^\s*([-*+]|\d+\.)\s+/.test(lines[i]) || (/^\s{2,}\S/.test(lines[i]) && items.length && !/^\s*([-*+]|\d+\.)\s+/.test(lines[i])))) {
-        const t = lines[i];
-        if (/^\s*([-*+]|\d+\.)\s+/.test(t)) items.push(t);
-        else items[items.length - 1] += "\n" + t;
-        i++;
-      }
-      out.push(renderList(items));
-      continue;
-    }
-    // 空行
-    if (/^\s*$/.test(line)) { i++; continue; }
-    // 段落（收集到空行或特殊块）
-    const buf = [line];
-    i++;
-    while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^```/.test(lines[i]) &&
-           !/^\s*([-*+]|\d+\.)\s+/.test(lines[i]) && !/^\s*>\s?/.test(lines[i]) &&
-           !/^\s*(---+|\*\*\*+|___+)\s*$/.test(lines[i]) && !/^\s{0,3}#{1,6}\s/.test(lines[i]) &&
-           !/^\s*\$\$/.test(lines[i]) && !/^\s*\\\[/.test(lines[i]) && !/^\s*\|.*\|\s*$/.test(lines[i])) {
-      buf.push(lines[i]);
-      i++;
-    }
-    out.push(`<p>${buf.map(inline).join("<br/>")}</p>`);
-  }
-  return out.join("\n");
-}
-
-/* ---------- 树工具 ---------- */
-function childrenOf(id) {
-  const pid = id || null;
-  return store.listKb().filter((n) => (n.parentId || null) === pid)
-    .sort((a, b) => (a.sort || 0) - (b.sort || 0) || (b.createdAt - a.createdAt));
-}
-function nodeById(id) { return store.getKbNode(id); }
-function isDescendant(id, ancestorId) {
-  let cur = nodeById(id);
-  while (cur && cur.parentId) {
-    if (cur.parentId === ancestorId) return true;
-    cur = nodeById(cur.parentId);
-  }
-  return false;
-}
+/* ---------- 工具函数 ---------- */
 function fmtTime(ts) {
-  if (!ts) return "—";
+  if (!ts) return "";
   const d = new Date(ts);
-  const p = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000) return "刚刚";
+  if (diff < 3600000) return Math.floor(diff / 60000) + "分钟前";
+  if (diff < 86400000) return Math.floor(diff / 3600000) + "小时前";
+  if (diff < 604800000) return Math.floor(diff / 86400000) + "天前";
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
-/* ---------- 快捷键 ---------- */
-let _kbShortcutsBound = false;
-function initKbShortcuts(container) {
-  if (_kbShortcutsBound) return;
-  _kbShortcutsBound = true;
-  document.addEventListener("keydown", (e) => {
-    // 只在知识库页面生效
-    const view = document.getElementById("view-kb");
-    if (!view || view.hidden) return;
-    // 避免在输入框/textarea中触发单键快捷键
-    const inInput = e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable;
-    // Ctrl+Shift+N：新建笔记（任何位置都可触发）
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "n") {
-      e.preventDefault();
-      document.getElementById("kbAddNote")?.click();
-      return;
-    }
-    // N 键：新建笔记（仅当焦点不在输入框时）
-    if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "n") {
-      e.preventDefault();
-      document.getElementById("kbAddNote")?.click();
-    }
-    // F 键：聚焦搜索框（仅当焦点不在输入框时）
-    if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "f") {
-      e.preventDefault();
-      const search = document.getElementById("kbSearch");
-      if (search) { search.focus(); search.select(); }
-    }
-  });
+function defaultNoteTitle() {
+  const d = new Date();
+  return `未命名笔记 ${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+
+/* 获取所有笔记（排除文件夹） */
+function getAllNotes() {
+  return store.listKb().filter(n => n.type === "note");
+}
+
+/* 获取所有分类（从笔记的 category 字段提取） */
+function getAllCategories() {
+  const cats = new Set();
+  getAllNotes().forEach(n => { if (n.category) cats.add(n.category); });
+  return Array.from(cats).sort();
 }
 
 /* ---------- 主渲染 ---------- */
 export function renderKnowledgeBase(container) {
-  initKbShortcuts(container);
-  // 清理失效选中（被删或搜索无结果）
-  if (state.selectedId && !nodeById(state.selectedId)) state.selectedId = null;
-  const data = store.getData();
-  const kbCount = store.listKb().length;
-
-  // 进入知识库即预加载 KaTeX，打开笔记时公式立即可渲染（避免先显示回退文本）
-  ensureKatex().catch(() => {});
+  const notes = getAllNotes();
+  const selectedNote = state.selectedId ? store.getKbNode(state.selectedId) : null;
 
   container.innerHTML = `
-    <div class="section-head">
-      <div>
-        <h2>知识库</h2>
-        <div class="hint">多级目录 · Markdown 笔记 · LaTeX 公式 · 自动保存 · ${kbCount} 个节点</div>
-      </div>
-    </div>
+    <div class="kb-layout">
+      <!-- 左侧：笔记列表 -->
+      <aside class="kb-sidebar" id="kbSidebar">
+        <div class="kb-sidebar-header">
+          <h2 class="kb-sidebar-title">知识库</h2>
+          <button class="btn btn-primary btn-sm kb-new-btn" id="kbNewNote" type="button">+ 新建</button>
+        </div>
+        <div class="kb-search-wrap">
+          <input type="search" class="kb-search" id="kbSearch" placeholder="搜索笔记标题或内容…" value="${esc(state.q)}" />
+        </div>
+        <div class="kb-category-filter" id="kbCategoryFilter">
+          ${renderCategoryFilter()}
+        </div>
+        <div class="kb-note-list" id="kbNoteList">
+          ${renderNoteList(notes)}
+        </div>
+        <div class="kb-sidebar-footer">
+          <span class="kb-count">共 ${notes.length} 篇笔记</span>
+        </div>
+      </aside>
 
-    <div class="kb-toolbar">
-      <div class="kb-actions">
-        <button class="btn btn-primary btn-sm" id="kbAddNote" type="button">+ 新建笔记</button>
-        <button class="btn btn-ghost btn-sm" id="kbAddFolder" type="button">+ 新建文件夹</button>
-      </div>
-      <div class="search kb-search"><input class="input" id="kbSearch" type="search" placeholder="搜索标题或内容" value="${esc(state.q)}" /></div>
-    </div>
-
-    <div class="kb-main">
-      <div class="card kb-tree">
-        <div class="kb-tree-head">📂 目录</div>
-        <div class="kb-tree-list" id="kbTreeList"></div>
-      </div>
-      <div class="card kb-editor" id="kbEditor"></div>
+      <!-- 右侧：编辑器 -->
+      <main class="kb-editor-panel" id="kbEditorPanel">
+        ${selectedNote ? renderEditor(selectedNote) : renderEmptyState()}
+      </main>
     </div>
   `;
 
-  // 树
-  const treeWrap = container.querySelector("#kbTreeList");
-  treeWrap.innerHTML = renderTreeHtml();
-
-  // 编辑器
-  const editor = container.querySelector("#kbEditor");
-  renderEditor(editor);
-
-  // 事件
-  container.querySelector("#kbAddNote").onclick = () => {
-    const parentId = state.selectedId && nodeById(state.selectedId)?.type === "folder" ? state.selectedId : null;
-    const n = store.addKbNode({ type: "note", parentId, title: defaultNoteTitle() });
-    state.selectedId = n.id; state.expanded.add(n.parentId || "root");
-    renderKnowledgeBase(container);
-    const newEditor = container.querySelector("#kbEditor");
-    selectEditorFocus(newEditor, n.id);
-  };
-  container.querySelector("#kbAddFolder").onclick = () => { const n = store.addKbNode({ type: "folder", parentId: state.selectedId && nodeById(state.selectedId)?.type === "folder" ? state.selectedId : null, title: "新建文件夹" }); state.selectedId = n.id; state.expanded.add(n.parentId || "root"); renderKnowledgeBase(container); };
-  const search = container.querySelector("#kbSearch");
-  search.oninput = (e) => {
-    state.q = e.target.value.trim();
-    treeWrap.innerHTML = renderTreeHtml();
-  };
-
-  // 树点击委托
-  treeWrap.onclick = (e) => {
-    const nodeEl = e.target.closest("[data-node-id]");
-    if (!nodeEl) return;
-    const id = nodeEl.dataset.nodeId;
-    const node = nodeById(id);
-    if (!node) return;
-    const act = e.target.closest("[data-act]")?.dataset.act;
-    if (act) { handleAction(act, id, container); return; }
-    if (node.type === "folder") {
-      // 点击文件夹：切换展开（若在展开箭头/标题上）；默认选中并展开
-      if (state.selectedId === id) toggleFolder(id, treeWrap, editor);
-      else { state.selectedId = id; renderKnowledgeBase(container); }
-    } else {
-      state.selectedId = id;
-      renderKnowledgeBase(container);
-    }
-  };
+  bindEvents(container);
 }
 
-/* 渲染树（含搜索过滤与展开态） */
-function renderTreeHtml() {
-  const q = state.q.toLowerCase();
-  const matchSet = new Set();
-  const parentSet = new Set();
-  if (q) {
-    store.listKb().forEach((n) => {
-      const hit = n.title.toLowerCase().includes(q) ||
-        (n.type === "note" && String(n.content || "").toLowerCase().includes(q));
-      if (hit) {
-        matchSet.add(n.id);
-        let p = n.parentId;
-        while (p) { parentSet.add(p); p = nodeById(p)?.parentId; }
-      }
-    });
-    parentSet.forEach((id) => matchSet.add(id));
-  }
-  const roots = childrenOf(null);
-  if (!roots.length) {
-    return `<div class="kb-tree-empty">还没有内容<br/>点击上方「+ 新建笔记」开始</div>`;
-  }
-  return roots.map((n) => nodeHtml(n, q ? matchSet : null)).join("");
+/* ---------- 分类筛选 ---------- */
+function renderCategoryFilter() {
+  const cats = getAllCategories();
+  let html = `<button class="kb-cat-tag ${state.categoryFilter === 'all' ? 'active' : ''}" data-cat="all">全部</button>`;
+  cats.forEach(cat => {
+    html += `<button class="kb-cat-tag ${state.categoryFilter === cat ? 'active' : ''}" data-cat="${esc(cat)}">${esc(cat)}</button>`;
+  });
+  return html;
 }
 
-function nodeHtml(node, matchSet) {
-  const isMatch = !matchSet || matchSet.has(node.id);
-  const hasMatchChild = matchSet && childrenOf(node.id).some((c) => matchSet.has(c.id));
-  if (matchSet && !isMatch && !hasMatchChild) return "";
-  const isFolder = node.type === "folder";
-  const expanded = state.expanded.has(node.id);
-  const selected = state.selectedId === node.id;
-  const kids = childrenOf(node.id);
-  const ops = isFolder
-    ? `<span class="kb-ops"><button data-act="add-note" title="新建笔记">＋笔记</button><button data-act="add-folder" title="新建子文件夹">＋夹</button><button data-act="rename" title="重命名">改名</button><button data-act="move" title="移动到">移动</button><button data-act="del" title="删除">删除</button></span>`
-    : `<span class="kb-ops"><button data-act="rename" title="重命名">改名</button><button data-act="move" title="移动到">移动</button><button data-act="del" title="删除">删除</button></span>`;
-  const inner = isFolder
-    ? `<span class="kb-caret">${expanded ? "▾" : "▸"}</span><span class="kb-ico">${expanded ? "📂" : "📁"}</span><span class="kb-label">${esc(node.title)}</span>${ops}`
-    : `<span class="kb-caret"></span><span class="kb-ico">📄</span><span class="kb-label">${esc(node.title)}</span>${ops}`;
-  const sub = expanded && kids.length ? `<div class="kb-children">${kids.map((c) => nodeHtml(c, matchSet)).join("")}</div>` : "";
-  return `<div class="kb-node ${isFolder ? "kb-folder" : "kb-note"}${selected ? " selected" : ""}" data-node-id="${node.id}">
-    ${inner}
-    ${sub}
+/* ---------- 笔记列表 ---------- */
+function renderNoteList(notes) {
+  // 筛选
+  let filtered = notes;
+  if (state.categoryFilter !== "all") {
+    filtered = filtered.filter(n => n.category === state.categoryFilter);
+  }
+  if (state.q) {
+    const q = state.q.toLowerCase();
+    filtered = filtered.filter(n =>
+      n.title.toLowerCase().includes(q) ||
+      String(n.content || "").toLowerCase().includes(q)
+    );
+  }
+  // 按更新时间排序
+  filtered.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+  if (filtered.length === 0) {
+    return `<div class="kb-empty-list">
+      <div class="kb-empty-icon">📝</div>
+      <p class="kb-empty-text">${state.q ? "没有找到匹配的笔记" : "还没有笔记，点击上方新建吧"}</p>
+    </div>`;
+  }
+
+  return filtered.map(n => `
+    <div class="kb-note-card ${state.selectedId === n.id ? 'active' : ''}" data-note-id="${n.id}">
+      <div class="kb-note-card-header">
+        <h3 class="kb-note-card-title">${esc(n.title || "未命名")}</h3>
+        <button class="kb-note-card-delete" data-delete="${n.id}" title="删除">×</button>
+      </div>
+      <p class="kb-note-card-summary">${esc(extractSummary(n.content))}</p>
+      <div class="kb-note-card-meta">
+        ${n.category ? `<span class="kb-note-card-cat">${esc(n.category)}</span>` : ""}
+        <span class="kb-note-card-time">${fmtTime(n.updatedAt)}</span>
+      </div>
+    </div>
+  `).join("");
+}
+
+/* ---------- 空状态 ---------- */
+function renderEmptyState() {
+  return `<div class="kb-empty-editor">
+    <div class="kb-empty-editor-icon">📚</div>
+    <h2 class="kb-empty-editor-title">选择一篇笔记开始阅读</h2>
+    <p class="kb-empty-editor-desc">或者点击左侧「+ 新建」创建一篇新笔记</p>
   </div>`;
 }
 
 /* ---------- 编辑器 ---------- */
-function renderEditor(editor) {
-  const node = state.selectedId ? nodeById(state.selectedId) : null;
-  if (!node) {
-    editor.innerHTML = `
-      <div class="kb-editor-empty">
-        <div class="empty-ico">📚</div>
-        <h3>选择或新建一篇笔记</h3>
-        <p>左侧为目录，点「+ 新建笔记」或点选已有笔记开始编辑。<br/>支持 Markdown 语法，内容自动保存。快捷键 <kbd>Ctrl</kbd>+<kbd>N</kbd> 快速创建</p>
-        <div style="margin-top:18px;display:flex;gap:10px;justify-content:center">
-          <button class="btn btn-primary" id="kbEmptyAddNote" type="button">✎ 新建笔记</button>
-          <button class="btn btn-ghost" id="kbEmptyAddFolder" type="button">📁 新建文件夹</button>
-        </div>
-      </div>`;
-    editor.querySelector("#kbEmptyAddNote").onclick = () => { document.getElementById("kbAddNote")?.click(); };
-    editor.querySelector("#kbEmptyAddFolder").onclick = () => { document.getElementById("kbAddFolder")?.click(); };
-    return;
-  }
-  if (node.type === "folder") {
-    const kids = childrenOf(node.id);
-    editor.innerHTML = `
-      <div class="kb-editor-folder">
-        <div class="kb-folder-head">📁 ${esc(node.title)}</div>
-        <div class="muted" style="font-size:13px;margin-top:4px">创建于 ${fmtTime(node.createdAt)} · 包含 ${kids.length} 项</div>
-        <div style="margin-top:16px;display:flex;gap:10px">
-          <button class="btn btn-primary btn-sm" id="kbFoldAddNote">+ 在此新建笔记</button>
-          <button class="btn btn-ghost btn-sm" id="kbFoldAddFolder">+ 新建子文件夹</button>
-        </div>
-        ${kids.length ? `<div style="margin-top:16px;display:flex;flex-direction:column;gap:6px">${kids.map((k) => `
-          <div style="padding:8px 12px;background:var(--surface-2);border:1px solid var(--line-soft);border-radius:var(--r-sm);font-size:13.5px">${k.type === "folder" ? "📁" : "📄"} ${esc(k.title)}</div>`).join("")}</div>` : ""}
-      </div>`;
-    const e = editor;
-    e.querySelector("#kbFoldAddNote").onclick = () => { const n = store.addKbNode({ type: "note", parentId: node.id }); state.selectedId = n.id; state.expanded.add(node.id); renderKnowledgeBase(document.getElementById("view-kb")); };
-    e.querySelector("#kbFoldAddFolder").onclick = () => { store.addKbNode({ type: "folder", parentId: node.id }); state.expanded.add(node.id); renderKnowledgeBase(document.getElementById("view-kb")); };
-    return;
-  }
-
-  // note 编辑 — Notebook 风格块级编辑器
+function renderEditor(note) {
   const vm = state.viewMode;
-  let blocks = parseBlocks(node.content || "");
-  if (blocks.length === 0) blocks = [{ id: genBlockId(), type: "text", content: "" }];
-
-  editor.innerHTML = `
-    <div class="kb-editor-top">
-      <input class="kb-title-input" id="kbTitle" value="${esc(node.title)}" placeholder="笔记标题" />
-      <div class="kb-meta muted">创建 ${fmtTime(node.createdAt)} · 更新 ${fmtTime(node.updatedAt)}</div>
-    </div>
-    <div class="kb-block-toolbar">
-      <button class="btn btn-ghost btn-sm" data-add="text" type="button">+ 文本块</button>
-      <button class="btn btn-ghost btn-sm" data-add="image" type="button">+ 图片块</button>
-      <button class="btn btn-primary btn-sm" id="kbSaveBtn" type="button">💾 保存</button>
-      <span class="kb-mode">
-        <button data-mode="edit" class="${vm === "edit" ? "on" : ""}">编辑</button>
-        <button data-mode="preview" class="${vm === "preview" ? "on" : ""}">预览</button>
-      </span>
-    </div>
-    <div class="kb-editor-body mode-${vm}">
-      <div class="kb-blocks" id="kbBlocks"></div>
-      <div class="kb-preview markdown-body" id="kbPreview"></div>
-    </div>
-    <div class="kb-savebar">
-      <span class="kb-save-dot" id="kbSaveDot"></span>
-      <span id="kbSaveState">已保存</span>
-      <span class="kb-auto-save">自动保存 · 10秒</span>
+  return `
+    <div class="kb-editor" id="kbEditor">
+      <div class="kb-editor-top">
+        <input class="kb-title-input" id="kbTitle" value="${esc(note.title)}" placeholder="笔记标题" />
+        <div class="kb-editor-actions">
+          <input class="kb-cat-input" id="kbCategory" type="text" placeholder="分类（可选）" value="${esc(note.category || "")}" list="kbCatList" />
+          <datalist id="kbCatList">${getAllCategories().map(c => `<option value="${esc(c)}">`).join("")}</datalist>
+          <button class="btn btn-primary btn-sm" id="kbSaveBtn" type="button">💾 保存</button>
+        </div>
+      </div>
+      <div class="kb-editor-meta">
+        <span>创建 ${fmtTime(note.createdAt)}</span>
+        <span>更新 ${fmtTime(note.updatedAt)}</span>
+      </div>
+      <div class="kb-mdbar">
+        <button data-md="bold" title="加粗"><b>B</b></button>
+        <button data-md="italic" title="斜体"><i>I</i></button>
+        <button data-md="strike" title="删除线"><s>S</s></button>
+        <button data-md="h2" title="标题">H</button>
+        <button data-md="quote" title="引用">❝</button>
+        <button data-md="ul" title="无序列表">•</button>
+        <button data-md="ol" title="有序列表">1.</button>
+        <button data-md="code" title="代码">&lt;/&gt;</button>
+        <button data-md="link" title="链接">🔗</button>
+        <button data-md="image" title="插入图片">🖼</button>
+        <button data-md="math" title="块级公式">Σ</button>
+        <button data-md="mathi" title="行内公式">$x$</button>
+        <span class="kb-mode">
+          <button data-mode="edit" class="${vm === 'edit' ? 'on' : ''}">编辑</button>
+          <button data-mode="split" class="${vm === 'split' ? 'on' : ''}">分屏</button>
+          <button data-mode="preview" class="${vm === 'preview' ? 'on' : ''}">预览</button>
+        </span>
+      </div>
+      <div class="kb-editor-body mode-${vm}">
+        <div class="kb-textarea-wrap">
+          <textarea class="kb-textarea" id="kbText" placeholder="用 Markdown 写笔记…
+# 标题
+- 列表
+**加粗**
+$$公式$$
+粘贴图片自动插入">${esc(note.content || "")}</textarea>
+        </div>
+        <div class="kb-preview markdown-body" id="kbPreview"></div>
+      </div>
+      <div class="kb-savebar">
+        <span class="kb-save-dot" id="kbSaveDot"></span>
+        <span id="kbSaveState">已保存</span>
+        <span class="kb-auto-save">自动保存 · 10秒</span>
+      </div>
     </div>
   `;
+}
 
-  const e = editor;
-  const blocksEl = e.querySelector("#kbBlocks");
-  const pv = e.querySelector("#kbPreview");
-  const dot = e.querySelector("#kbSaveDot");
-  const saveState = e.querySelector("#kbSaveState");
+/* ---------- 事件绑定 ---------- */
+function bindEvents(container) {
+  // 新建笔记
+  const newBtn = container.querySelector("#kbNewNote");
+  if (newBtn) newBtn.onclick = () => {
+    const n = store.addKbNode({ type: "note", title: defaultNoteTitle(), content: "" });
+    state.selectedId = n.id;
+    renderKnowledgeBase(container);
+    // 聚焦标题
+    setTimeout(() => {
+      const titleInput = container.querySelector("#kbTitle");
+      if (titleInput) { titleInput.focus(); titleInput.select(); }
+    }, 50);
+  };
 
+  // 搜索
+  const search = container.querySelector("#kbSearch");
+  if (search) {
+    search.oninput = (e) => {
+      state.q = e.target.value.trim();
+      const list = container.querySelector("#kbNoteList");
+      if (list) list.innerHTML = renderNoteList(getAllNotes());
+    };
+  }
+
+  // 分类筛选
+  const catFilter = container.querySelector("#kbCategoryFilter");
+  if (catFilter) {
+    catFilter.onclick = (e) => {
+      const tag = e.target.closest("[data-cat]");
+      if (!tag) return;
+      state.categoryFilter = tag.dataset.cat;
+      catFilter.innerHTML = renderCategoryFilter();
+      const list = container.querySelector("#kbNoteList");
+      if (list) list.innerHTML = renderNoteList(getAllNotes());
+    };
+  }
+
+  // 笔记卡片点击
+  const noteList = container.querySelector("#kbNoteList");
+  if (noteList) {
+    noteList.onclick = (e) => {
+      // 删除按钮
+      const deleteBtn = e.target.closest("[data-delete]");
+      if (deleteBtn) {
+        e.stopPropagation();
+        const id = deleteBtn.dataset.delete;
+        confirmBox("确定删除这篇笔记吗？", () => {
+          store.deleteKbNode(id);
+          if (state.selectedId === id) state.selectedId = null;
+          renderKnowledgeBase(container);
+          toast("已删除", "ok");
+        });
+        return;
+      }
+      // 选中笔记
+      const card = e.target.closest("[data-note-id]");
+      if (!card) return;
+      state.selectedId = card.dataset.noteId;
+      renderKnowledgeBase(container);
+    };
+  }
+
+  // 编辑器事件
+  const editor = container.querySelector("#kbEditor");
+  if (editor) bindEditorEvents(editor, container);
+}
+
+/* ---------- 编辑器事件 ---------- */
+function bindEditorEvents(editor, container) {
+  const ta = editor.querySelector("#kbText");
+  const pv = editor.querySelector("#kbPreview");
+  const dot = editor.querySelector("#kbSaveDot");
+  const saveState = editor.querySelector("#kbSaveState");
+  const note = store.getKbNode(state.selectedId);
+  if (!note) return;
+
+  const refreshPreview = () => { pv.innerHTML = mdToHtml(ta.value); };
   const markDirty = (label) => { dot.classList.add("dirty"); saveState.textContent = label || "编辑中…"; };
   const markSaved = (t) => { dot.classList.remove("dirty"); saveState.textContent = t || "已保存"; };
 
-  /* 渲染单个块 */
-  function renderBlock(b, idx) {
-    if (b.type === "image") {
-      return `<div class="kb-block kb-block-image" data-block-id="${b.id}" data-block-type="image">
-        <div class="kb-block-actions">
-          <button data-action="up" title="上移" ${idx === 0 ? "disabled" : ""}>↑</button>
-          <button data-action="down" title="下移" ${idx === blocks.length - 1 ? "disabled" : ""}>↓</button>
-          <button data-action="delete" title="删除">×</button>
-        </div>
-        <div class="kb-block-image-wrap" data-image-block>
-          <div class="kb-block-image-area">
-            <img src="${b.src}" alt="${esc(b.alt || "")}" />
-            <div class="kb-block-image-overlay">
-              <span class="kb-block-image-hint">📋 点击选择 / 拖拽 / Ctrl+V 粘贴替换</span>
-            </div>
-          </div>
-          <input class="kb-block-caption" type="text" placeholder="图片说明（可选）" value="${esc(b.alt || "")}" />
-        </div>
-      </div>`;
-    }
-    return `<div class="kb-block kb-block-text" data-block-id="${b.id}" data-block-type="text">
-      <div class="kb-block-actions">
-        <button data-action="up" title="上移" ${idx === 0 ? "disabled" : ""}>↑</button>
-        <button data-action="down" title="下移" ${idx === blocks.length - 1 ? "disabled" : ""}>↓</button>
-        <button data-action="delete" title="删除">×</button>
-      </div>
-      <textarea class="kb-block-text" placeholder="输入文本内容，支持 Markdown 语法…" rows="1">${esc(b.content || "")}</textarea>
-    </div>`;
-  }
-
-  /* 渲染所有块 */
-  function renderBlocks() {
-    blocksEl.innerHTML = blocks.map((b, i) => renderBlock(b, i)).join("");
-    // 文本块自动高度
-    blocksEl.querySelectorAll(".kb-block-text").forEach((ta) => {
-      ta.style.height = "auto";
-      ta.style.height = Math.max(ta.scrollHeight, 40) + "px";
-    });
-  }
-
-  /* 刷新预览 */
-  function refreshPreview() { pv.innerHTML = mdToHtml(serializeBlocks(blocks)); }
-
-  /* 保存到 store */
-  function doSave() {
-    const content = serializeBlocks(blocks);
-    store.updateKbNode(node.id, { content });
-    markSaved();
-    const meta = e.querySelector(".kb-meta");
-    if (meta) meta.textContent = `创建 ${fmtTime(node.createdAt)} · 更新 ${fmtTime(Date.now())}`;
-  }
-
-  /* 10秒防抖自动保存 */
-  let autoSaveTimer = null;
-  function scheduleAutoSave() {
-    markDirty();
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(doSave, 10000);
-  }
-
-  renderBlocks();
+  // 预览初始
   refreshPreview();
   ensureKatex().then(() => { if (pv.isConnected) refreshPreview(); }).catch(() => {});
 
-  /* 块操作事件委托 */
-  blocksEl.addEventListener("click", (ev) => {
-    const btn = ev.target.closest("[data-action]");
-    if (!btn) return;
-    const blockEl = btn.closest(".kb-block");
-    if (!blockEl) return;
-    const blockId = blockEl.dataset.blockId;
-    const idx = blocks.findIndex((b) => b.id === blockId);
-    if (idx < 0) return;
-    const action = btn.dataset.action;
-    if (action === "up" && idx > 0) {
-      [blocks[idx - 1], blocks[idx]] = [blocks[idx], blocks[idx - 1]];
-      renderBlocks(); scheduleAutoSave();
-    } else if (action === "down" && idx < blocks.length - 1) {
-      [blocks[idx], blocks[idx + 1]] = [blocks[idx + 1], blocks[idx]];
-      renderBlocks(); scheduleAutoSave();
-    } else if (action === "delete") {
-      if (blocks.length <= 1) { toast("至少保留一个块", "err"); return; }
-      blocks.splice(idx, 1);
-      renderBlocks(); refreshPreview(); scheduleAutoSave();
-    }
-  });
+  // 自动保存（10秒防抖）
+  const saveContent = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      store.updateKbNode(note.id, { content: ta.value });
+      markSaved();
+      const meta = editor.querySelector(".kb-editor-meta");
+      if (meta) meta.innerHTML = `<span>创建 ${fmtTime(note.createdAt)}</span><span>更新 ${fmtTime(Date.now())}</span>`;
+      // 更新列表中的时间
+      const list = container.querySelector("#kbNoteList");
+      if (list) list.innerHTML = renderNoteList(getAllNotes());
+    }, 10000);
+  };
 
-  /* 文本块输入 */
-  blocksEl.addEventListener("input", (ev) => {
-    const ta = ev.target.closest(".kb-block-text");
-    if (!ta) return;
-    const blockEl = ta.closest(".kb-block");
-    const blockId = blockEl?.dataset.blockId;
-    const b = blocks.find((x) => x.id === blockId);
-    if (b) { b.content = ta.value; }
-    // 自动高度
-    ta.style.height = "auto";
-    ta.style.height = Math.max(ta.scrollHeight, 40) + "px";
+  ta.addEventListener("input", () => {
     refreshPreview();
-    scheduleAutoSave();
+    markDirty();
+    saveContent();
   });
 
-  /* 图片块标题输入 */
-  blocksEl.addEventListener("input", (ev) => {
-    const caption = ev.target.closest(".kb-block-caption");
-    if (!caption) return;
-    const blockEl = caption.closest(".kb-block");
-    const blockId = blockEl?.dataset.blockId;
-    const b = blocks.find((x) => x.id === blockId);
-    if (b) { b.alt = caption.value; refreshPreview(); scheduleAutoSave(); }
-  });
-
-  /* 通用：处理图片文件并替换指定块 */
-  async function handleImageFile(file, blockId) {
-    if (!file || !file.type.startsWith("image/")) return false;
-    if (file.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return false; }
-    toast("图片处理中…", "ok");
-    const dataUrl = await fileToCompressedDataUrl(file, 1000, 0.75);
-    if (!dataUrl) { toast("图片处理失败", "err"); return false; }
-    const b = blocks.find((x) => x.id === blockId);
-    if (b) {
-      b.src = dataUrl;
-      renderBlocks();
-      refreshPreview();
-      scheduleAutoSave();
-      toast("图片已替换", "ok");
-      return true;
-    }
-    return false;
-  }
-
-  /* 图片块粘贴替换图片 */
-  blocksEl.addEventListener("paste", async (ev) => {
-    const imgWrap = ev.target.closest(".kb-block-image-wrap");
-    if (!imgWrap) return;
+  // 粘贴图片
+  ta.addEventListener("paste", async (ev) => {
     const items = ev.clipboardData?.items;
     if (!items) return;
-    // 同步获取文件（DataTransferItem 必须在同步上下文获取）
     let imageFile = null;
     for (const item of items) {
       if (item.type.startsWith("image/")) {
@@ -662,106 +418,94 @@ function renderEditor(editor) {
       }
     }
     if (!imageFile) return;
-    ev.preventDefault(); // 阻止默认粘贴，避免 base64 字符出现在输入框
-    const blockEl = imgWrap.closest(".kb-block");
-    await handleImageFile(imageFile, blockEl?.dataset.blockId);
-  });
-
-  /* 图片块：点击选择图片 */
-  blocksEl.addEventListener("click", (ev) => {
-    const imgArea = ev.target.closest(".kb-block-image-area");
-    if (!imgArea) return;
-    const imgWrap = imgArea.closest(".kb-block-image-wrap");
-    const blockEl = imgWrap?.closest(".kb-block");
-    const blockId = blockEl?.dataset.blockId;
-    if (!blockId) return;
-    const input = document.createElement("input");
-    input.type = "file"; input.accept = "image/*";
-    input.onchange = async () => {
-      const file = input.files && input.files[0];
-      if (file) await handleImageFile(file, blockId);
-    };
-    input.click();
-  });
-
-  /* 图片块：拖拽上传 */
-  blocksEl.addEventListener("dragover", (ev) => {
-    const imgArea = ev.target.closest(".kb-block-image-area");
-    if (!imgArea) return;
     ev.preventDefault();
-    imgArea.classList.add("drag-over");
-  });
-  blocksEl.addEventListener("dragleave", (ev) => {
-    const imgArea = ev.target.closest(".kb-block-image-area");
-    if (!imgArea) return;
-    imgArea.classList.remove("drag-over");
-  });
-  blocksEl.addEventListener("drop", async (ev) => {
-    const imgArea = ev.target.closest(".kb-block-image-area");
-    if (!imgArea) return;
-    ev.preventDefault();
-    imgArea.classList.remove("drag-over");
-    const imgWrap = imgArea.closest(".kb-block-image-wrap");
-    const blockEl = imgWrap?.closest(".kb-block");
-    const blockId = blockEl?.dataset.blockId;
-    const file = ev.dataTransfer?.files && ev.dataTransfer.files[0];
-    if (file && blockId) await handleImageFile(file, blockId);
+    if (imageFile.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return; }
+    toast("图片处理中…", "ok");
+    const dataUrl = await fileToCompressedDataUrl(imageFile, 1000, 0.75);
+    if (!dataUrl) { toast("图片处理失败", "err"); return; }
+    // 在光标位置插入图片 markdown
+    const s = ta.selectionStart, e2 = ta.selectionEnd;
+    ta.value = ta.value.slice(0, s) + `\n![图片](${dataUrl})\n` + ta.value.slice(e2);
+    ta.selectionStart = ta.selectionEnd = s + dataUrl.length + 12;
+    refreshPreview();
+    markDirty();
+    saveContent();
+    toast("已插入图片", "ok");
   });
 
-  /* 添加块按钮 */
-  e.querySelector("[data-add=text]").onclick = () => {
-    blocks.push({ id: genBlockId(), type: "text", content: "" });
-    renderBlocks(); refreshPreview(); scheduleAutoSave();
-    // 聚焦新块
-    setTimeout(() => {
-      const textareas = blocksEl.querySelectorAll(".kb-block-text");
-      const last = textareas[textareas.length - 1];
-      if (last) last.focus();
-    }, 50);
-  };
-  e.querySelector("[data-add=image]").onclick = () => {
-    const input = document.createElement("input");
-    input.type = "file"; input.accept = "image/*";
-    input.onchange = async () => {
-      const file = input.files && input.files[0];
-      if (!file || !file.type.startsWith("image/")) return;
-      if (file.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return; }
-      toast("图片处理中…", "ok");
-      const dataUrl = await fileToCompressedDataUrl(file, 1000, 0.75);
-      if (!dataUrl) { toast("图片处理失败", "err"); return; }
-      blocks.push({ id: genBlockId(), type: "image", alt: "图片", src: dataUrl });
-      renderBlocks(); refreshPreview(); scheduleAutoSave();
-      toast("已添加图片块", "ok");
-    };
-    input.click();
-  };
+  // 标题自动保存
+  const titleInput = editor.querySelector("#kbTitle");
+  if (titleInput) {
+    titleInput.addEventListener("input", () => {
+      markDirty("标题编辑中…");
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        store.updateKbNode(note.id, { title: titleInput.value });
+        markSaved();
+        const list = container.querySelector("#kbNoteList");
+        if (list) list.innerHTML = renderNoteList(getAllNotes());
+      }, 10000);
+    });
+    titleInput.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); ta.focus(); }
+    });
+  }
 
-  /* 手动保存按钮 */
-  e.querySelector("#kbSaveBtn").onclick = () => {
-    clearTimeout(autoSaveTimer);
-    doSave();
-    toast("已保存", "ok");
-  };
-
-  /* 标题自动保存 */
-  const titleInput = e.querySelector("#kbTitle");
-  titleInput.addEventListener("input", () => {
-    markDirty("标题编辑中…");
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(() => {
-      store.updateKbNode(node.id, { title: titleInput.value });
+  // 分类自动保存
+  const catInput = editor.querySelector("#kbCategory");
+  if (catInput) {
+    catInput.addEventListener("change", () => {
+      store.updateKbNode(note.id, { category: catInput.value.trim() || null });
       markSaved();
-    }, 10000);
+      // 更新分类筛选和列表
+      const catFilter = container.querySelector("#kbCategoryFilter");
+      if (catFilter) catFilter.innerHTML = renderCategoryFilter();
+      const list = container.querySelector("#kbNoteList");
+      if (list) list.innerHTML = renderNoteList(getAllNotes());
+      toast("分类已更新", "ok");
+    });
+  }
+
+  // 手动保存
+  const saveBtn = editor.querySelector("#kbSaveBtn");
+  if (saveBtn) {
+    saveBtn.onclick = () => {
+      clearTimeout(saveTimer);
+      store.updateKbNode(note.id, { content: ta.value, title: titleInput?.value, category: catInput?.value.trim() || null });
+      markSaved();
+      toast("已保存", "ok");
+      const list = container.querySelector("#kbNoteList");
+      if (list) list.innerHTML = renderNoteList(getAllNotes());
+    };
+  }
+
+  // 工具栏
+  const toolActions = {
+    bold: () => wrapSelection(ta, "**", "**", "加粗文字"),
+    italic: () => wrapSelection(ta, "*", "*", "斜体文字"),
+    strike: () => wrapSelection(ta, "~~", "~~", "删除线文字"),
+    h2: () => prependLine(ta, "## "),
+    quote: () => prependLine(ta, "> "),
+    ul: () => prependLine(ta, "- "),
+    ol: () => prependLine(ta, "1. "),
+    code: () => wrapSelection(ta, "`", "`", "code"),
+    link: () => wrapSelection(ta, "[", "](https://)", "链接文字"),
+    image: () => insertImage(ta, refreshPreview, markDirty, saveContent),
+    math: () => wrapSelection(ta, "\n$$\n", "\n$$\n", "\\frac{a}{b}"),
+    mathi: () => wrapSelection(ta, "$", "$", "x^2"),
+  };
+  editor.querySelectorAll("[data-md]").forEach((btn) => {
+    btn.onclick = () => { const fn = toolActions[btn.dataset.md]; if (fn) { fn(); ta.focus(); refreshPreview(); } };
   });
 
-  /* 模式切换 */
-  e.querySelectorAll("[data-mode]").forEach((btn) => {
+  // 模式切换
+  editor.querySelectorAll("[data-mode]").forEach((btn) => {
     btn.onclick = () => {
       state.viewMode = btn.dataset.mode;
-      const body = e.querySelector(".kb-editor-body");
-      body.classList.remove("mode-edit", "mode-preview");
+      const body = editor.querySelector(".kb-editor-body");
+      body.classList.remove("mode-edit", "mode-split", "mode-preview");
       body.classList.add("mode-" + btn.dataset.mode);
-      e.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === btn.dataset.mode));
+      editor.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === btn.dataset.mode));
     };
   });
 }
@@ -778,156 +522,28 @@ function prependLine(ta, prefix) {
   const s = ta.selectionStart;
   const lineStart = ta.value.lastIndexOf("\n", s - 1) + 1;
   ta.value = ta.value.slice(0, lineStart) + prefix + ta.value.slice(lineStart);
-  ta.selectionStart = ta.selectionEnd = lineStart + prefix.length;
+  ta.selectionStart = ta.selectionEnd = s + prefix.length;
 }
 function insertAtCursor(ta, text) {
   const s = ta.selectionStart, e2 = ta.selectionEnd;
   ta.value = ta.value.slice(0, s) + text + ta.value.slice(e2);
   ta.selectionStart = ta.selectionEnd = s + text.length;
 }
-async function insertImage(ta, refreshPreview, markDirty, saveContent, editor) {
+
+/* 插入图片（文件选择） */
+function insertImage(ta, refreshPreview, markDirty, saveContent) {
   const input = document.createElement("input");
-  input.type = "file";
-  input.accept = "image/*";
+  input.type = "file"; input.accept = "image/*";
   input.onchange = async () => {
     const file = input.files && input.files[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) { toast("请选择图片文件", "err"); return; }
+    if (!file || !file.type.startsWith("image/")) return;
     if (file.size > 8 * 1024 * 1024) { toast("图片过大（限 8MB）", "err"); return; }
     toast("图片处理中…", "ok");
     const dataUrl = await fileToCompressedDataUrl(file, 1000, 0.75);
     if (!dataUrl) { toast("图片处理失败", "err"); return; }
-    insertAtCursor(ta, `![图片](${dataUrl})\n`);
+    insertAtCursor(ta, `\n![图片](${dataUrl})\n`);
     refreshPreview(); markDirty(); saveContent();
-    toast("已插入图片，自动切换预览模式", "ok");
-    // 自动切换到预览模式，避免看到长长的 base64
-    if (editor && state.viewMode !== "preview") {
-      state.viewMode = "preview";
-      const body = editor.querySelector(".kb-editor-body");
-      if (body) {
-        body.classList.remove("mode-edit", "mode-split");
-        body.classList.add("mode-preview");
-      }
-      editor.querySelectorAll("[data-mode]").forEach(b => {
-        b.classList.toggle("on", b.dataset.mode === "preview");
-      });
-    }
+    toast("已插入图片", "ok");
   };
   input.click();
-}
-function selectEditorFocus(editor, id) {
-  // 新创建的笔记：聚焦标题并全选，方便直接重命名
-  const tryFocus = () => {
-    const titleInput = editor.querySelector("#kbTitle");
-    if (titleInput) {
-      titleInput.focus();
-      titleInput.select();
-      return true;
-    }
-    const ta = editor.querySelector("#kbText");
-    if (ta) { ta.focus(); return true; }
-    return false;
-  };
-  // 多次尝试，确保DOM渲染完成
-  if (!tryFocus()) {
-    requestAnimationFrame(() => { if (!tryFocus()) setTimeout(tryFocus, 50); });
-  }
-}
-
-/* 生成默认笔记标题：日期 + 序号 */
-function defaultNoteTitle() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  const dateStr = `${y}-${m}-${d}`;
-  // 检查今天已有多少篇笔记，生成序号
-  const todayNotes = store.listKb().filter(n => n.type === "note" && n.title?.startsWith(dateStr));
-  const num = todayNotes.length + 1;
-  return `${dateStr} 笔记${num > 1 ? ` ${num}` : ""}`;
-}
-
-/* ---------- 树操作 ---------- */
-function toggleFolder(id, treeWrap, editor) {
-  if (state.expanded.has(id)) state.expanded.delete(id);
-  else state.expanded.add(id);
-  treeWrap.innerHTML = renderTreeHtml();
-  if (editor) renderEditor(editor);
-}
-
-function handleAction(act, id, container) {
-  const node = nodeById(id);
-  if (!node) return;
-  const treeWrap = container.querySelector("#kbTreeList");
-  const editor = container.querySelector("#kbEditor");
-  if (act === "add-note") {
-    const n = store.addKbNode({ type: "note", parentId: id });
-    state.selectedId = n.id; state.expanded.add(id);
-    renderKnowledgeBase(container);
-  } else if (act === "add-folder") {
-    const n = store.addKbNode({ type: "folder", parentId: id });
-    state.selectedId = n.id; state.expanded.add(id);
-    renderKnowledgeBase(container);
-  } else if (act === "rename") {
-    openModal({
-      title: "重命名",
-      body: `<div class="field"><label>新名称</label><input class="input" id="rn_name" value="${esc(node.title)}" /></div>`,
-      footer: `<button class="btn btn-ghost" id="rn_cancel">取消</button><button class="btn btn-primary" id="rn_save">保存</button>`,
-      onMount: (root) => {
-        root.querySelector("#rn_name").focus();
-        root.querySelector("#rn_cancel").onclick = () => closeModal();
-        root.querySelector("#rn_save").onclick = () => {
-          const v = root.querySelector("#rn_name").value.trim();
-          if (!v) { toast("名称不能为空", "err"); return; }
-          store.updateKbNode(id, { title: v });
-          toast("已重命名", "ok");
-          closeModal();
-          renderKnowledgeBase(container);
-        };
-        root.querySelector("#rn_name").addEventListener("keydown", (ev) => { if (ev.key === "Enter") root.querySelector("#rn_save").click(); });
-      },
-    });
-  } else if (act === "move") {
-    moveNodeDialog(id, container);
-  } else if (act === "del") {
-    const isFolder = node.type === "folder";
-    const msg = isFolder
-      ? `删除文件夹「${node.title}」将<b>一并删除其下的所有子文件夹与笔记</b>，不可恢复。确认？`
-      : `确认删除笔记「${node.title}」？`;
-    confirmBox("删除", msg).then((ok) => {
-      if (!ok) return;
-      if (state.selectedId === id || isDescendant(state.selectedId, id)) state.selectedId = null;
-      store.deleteKbNode(id);
-      toast("已删除", "ok");
-      renderKnowledgeBase(container);
-    });
-  }
-}
-
-function moveNodeDialog(id, container) {
-  const node = nodeById(id);
-  const folders = store.listKb().filter((n) => n.type === "folder" && n.id !== id && !isDescendant(n.id, id));
-  const opts = [`<option value="">根目录</option>`].concat(
-    folders.map((f) => {
-      // 计算层级前缀
-      let depth = 0, cur = f;
-      while (cur.parentId) { depth++; cur = nodeById(cur.parentId); }
-      return `<option value="${f.id}" ${node.parentId === f.id ? "selected" : ""}>${"　".repeat(depth)}${esc(f.title)}</option>`;
-    })
-  ).join("");
-  openModal({
-    title: `移动「${node.title}」`,
-    body: `<div class="field"><label>目标文件夹</label><select class="select" id="mv_target">${opts}</select></div>`,
-    footer: `<button class="btn btn-ghost" id="mv_cancel">取消</button><button class="btn btn-primary" id="mv_save">移动</button>`,
-    onMount: (root) => {
-      root.querySelector("#mv_cancel").onclick = () => closeModal();
-      root.querySelector("#mv_save").onclick = () => {
-        const target = root.querySelector("#mv_target").value || null;
-        store.moveKbNode(id, target);
-        toast("已移动", "ok");
-        closeModal();
-        renderKnowledgeBase(container);
-      };
-    },
-  });
 }
