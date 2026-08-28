@@ -519,7 +519,19 @@ function renderEditor(editor) {
         if (!dataUrl) { toast("图片处理失败", "err"); return; }
         insertAtCursor(ta, `![图片](${dataUrl})\n`);
         refreshPreview(); markDirty(); saveContent();
-        toast("已插入图片", "ok");
+        toast("已插入图片，自动切换预览模式", "ok");
+        // 自动切换到预览模式，避免看到长长的 base64
+        if (state.viewMode !== "preview") {
+          state.viewMode = "preview";
+          const body = e.querySelector(".kb-editor-body");
+          if (body) {
+            body.classList.remove("mode-edit", "mode-split");
+            body.classList.add("mode-preview");
+          }
+          e.querySelectorAll("[data-mode]").forEach(b => {
+            b.classList.toggle("on", b.dataset.mode === "preview");
+          });
+        }
         return;
       }
     }
@@ -549,7 +561,7 @@ function renderEditor(editor) {
       const tpl = "\n| 列1 | 列2 | 列3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |\n";
       insertAtCursor(ta, tpl);
     },
-    image: () => insertImage(ta, refreshPreview, markDirty, saveContent),
+    image: () => insertImage(ta, refreshPreview, markDirty, saveContent, editor),
     math: () => wrapSelection(ta, "\n$$\n", "\n$$\n", "\\frac{a}{b}"),
     mathi: () => wrapSelection(ta, "$", "$", "x^2"),
   };
@@ -585,7 +597,7 @@ function insertAtCursor(ta, text) {
   ta.value = ta.value.slice(0, s) + text + ta.value.slice(e2);
   ta.selectionStart = ta.selectionEnd = s + text.length;
 }
-async function insertImage(ta, refreshPreview, markDirty, saveContent) {
+async function insertImage(ta, refreshPreview, markDirty, saveContent, editor) {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "image/*";
@@ -599,7 +611,19 @@ async function insertImage(ta, refreshPreview, markDirty, saveContent) {
     if (!dataUrl) { toast("图片处理失败", "err"); return; }
     insertAtCursor(ta, `![图片](${dataUrl})\n`);
     refreshPreview(); markDirty(); saveContent();
-    toast("已插入图片（建议再用文字简要说明）", "ok");
+    toast("已插入图片，自动切换预览模式", "ok");
+    // 自动切换到预览模式，避免看到长长的 base64
+    if (editor && state.viewMode !== "preview") {
+      state.viewMode = "preview";
+      const body = editor.querySelector(".kb-editor-body");
+      if (body) {
+        body.classList.remove("mode-edit", "mode-split");
+        body.classList.add("mode-preview");
+      }
+      editor.querySelectorAll("[data-mode]").forEach(b => {
+        b.classList.toggle("on", b.dataset.mode === "preview");
+      });
+    }
   };
   input.click();
 }
