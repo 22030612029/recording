@@ -1622,29 +1622,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   background: rgba(230, 126, 34, 0.1);
 }
 
-/* 全局侧边栏切换按钮 */
-.global-sidebar-toggle {
-  position: fixed;
-  top: 16px; left: 16px;
-  z-index: 100;
-  width: 40px; height: 40px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 18px;
-  border-radius: 10px;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  transition: all .2s ease;
-}
-.global-sidebar-toggle:hover {
-  background: var(--surface-2);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-}
-
-/* 侧边栏隐藏（小窝沉浸模式） */
+/* 侧边栏隐藏（沉浸模式） */
 .sidebar.diary-sidebar-hidden {
   display: none !important;
 }

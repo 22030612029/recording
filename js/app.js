@@ -619,21 +619,52 @@ function estimateUsage() {
   } catch (e) { return "—"; }
 }
 
-/* ---------- 移动端侧栏 ---------- */
+/* ---------- 侧边栏切换（桌面端隐藏/显示 + 移动端抽屉） ---------- */
 function setupSidebar() {
   const sidebar = document.getElementById("sidebar");
+  const appShell = document.getElementById("appShell");
   const toggle = document.getElementById("menuToggle");
   const scrim = document.createElement("div");
   scrim.className = "scrim";
   document.body.appendChild(scrim);
-  const close = () => { sidebar.classList.remove("open"); scrim.classList.remove("show"); };
-  toggle.onclick = () => {
-    sidebar.classList.toggle("open");
-    scrim.classList.toggle("show", sidebar.classList.contains("open"));
+
+  // 默认隐藏侧边栏（桌面端沉浸模式）
+  sidebar.classList.add("diary-sidebar-hidden");
+  appShell.classList.add("diary-shell-full");
+
+  const isMobile = () => window.innerWidth <= 768;
+
+  const closeMobile = () => {
+    sidebar.classList.remove("open");
+    scrim.classList.remove("show");
   };
-  scrim.onclick = close;
+
+  const toggleDesktop = () => {
+    const hidden = sidebar.classList.toggle("diary-sidebar-hidden");
+    appShell.classList.toggle("diary-shell-full", hidden);
+    toggle.querySelector("span").textContent = hidden ? "☰" : "✕";
+    toggle.title = hidden ? "显示导航栏" : "隐藏导航栏";
+  };
+
+  toggle.onclick = () => {
+    if (isMobile()) {
+      // 移动端：抽屉式侧边栏
+      sidebar.classList.toggle("open");
+      scrim.classList.toggle("show", sidebar.classList.contains("open"));
+    } else {
+      // 桌面端：显示/隐藏侧边栏
+      toggleDesktop();
+    }
+  };
+
+  scrim.onclick = closeMobile;
   document.addEventListener("click", (e) => {
-    if (sidebar.classList.contains("open") && !sidebar.contains(e.target) && e.target !== toggle) close();
+    if (sidebar.classList.contains("open") && !sidebar.contains(e.target) && e.target !== toggle) closeMobile();
+  });
+
+  // 窗口大小变化时，重置移动端状态
+  window.addEventListener("resize", () => {
+    if (!isMobile()) closeMobile();
   });
 }
 
@@ -809,26 +840,6 @@ export function openGlobalSearch() {
 function init() {
   // 主题初始化（暗色模式）
   features.initTheme();
-
-  // 全局侧边栏切换（默认隐藏）
-  const sidebar = document.getElementById("sidebar");
-  const appShell = document.getElementById("appShell");
-  const globalToggle = document.getElementById("globalSidebarToggle");
-  function setSidebarHidden(hidden) {
-    sidebar?.classList.toggle("diary-sidebar-hidden", hidden);
-    appShell?.classList.toggle("diary-shell-full", hidden);
-    if (globalToggle) {
-      globalToggle.textContent = hidden ? "☰" : "✕";
-      globalToggle.title = hidden ? "显示导航栏" : "隐藏导航栏";
-    }
-  }
-  setSidebarHidden(true); // 默认隐藏
-  if (globalToggle) {
-    globalToggle.onclick = () => {
-      const isHidden = sidebar?.classList.contains("diary-sidebar-hidden");
-      setSidebarHidden(!isHidden);
-    };
-  }
 
   // 导航绑定
   document.querySelectorAll(".nav-item, .tab-item").forEach((b) => {
