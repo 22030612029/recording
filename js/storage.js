@@ -403,6 +403,21 @@ export function exportJSON() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+  // 记录最后备份时间
+  try {
+    localStorage.setItem(`recording_last_backup_${uid || "default"}`, Date.now().toString());
+  } catch (e) {}
+}
+
+/* 获取最后备份时间（时间戳），未备份返回 null */
+export function getLastBackupTime() {
+  try {
+    const uid = getSessionUserId();
+    const t = localStorage.getItem(`recording_last_backup_${uid || "default"}`);
+    return t ? parseInt(t, 10) : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 /* 存储用量统计：返回 { used, quota, pct }（字节），供设置页预警 */

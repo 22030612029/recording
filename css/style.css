@@ -2153,3 +2153,183 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   .diary-mood-emoji { font-size: 20px; }
   .diary-mood-label { font-size: 10px; }
 }
+
+/* ========== 全局移动端适配 ========== */
+@media (max-width: 768px) {
+  /* 侧边栏默认隐藏，可通过按钮展开 */
+  .sidebar {
+    position: fixed;
+    left: -240px;
+    top: 0;
+    bottom: 0;
+    z-index: 1000;
+    transition: left 0.3s ease;
+    box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+  }
+  .sidebar.open {
+    left: 0;
+  }
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 999;
+  }
+  .sidebar-overlay.show {
+    display: block;
+  }
+
+  /* 主内容区占满宽度 */
+  .main-content {
+    margin-left: 0 !important;
+    padding: 12px;
+  }
+
+  /* 顶部栏优化 */
+  .topbar {
+    padding: 0 12px;
+    height: 52px;
+  }
+  .topbar-title {
+    font-size: 16px;
+  }
+  .countdown-box {
+    font-size: 12px;
+    padding: 4px 10px;
+  }
+  .countdown-days {
+    font-size: 18px;
+  }
+
+  /* 卡片优化 */
+  .card {
+    padding: 14px;
+    border-radius: 10px;
+  }
+  .card-title {
+    font-size: 15px;
+    margin-bottom: 12px;
+  }
+
+  /* 网格布局优化 */
+  .grid-2 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  /* 按钮优化 */
+  .btn {
+    padding: 8px 14px;
+    font-size: 13px;
+    min-height: 36px;
+  }
+  .btn-sm {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  /* 表单优化 */
+  .form-group {
+    margin-bottom: 12px;
+  }
+  .form-label {
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  .form-input, .form-select, .form-textarea {
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+
+  /* 表格优化 */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  table {
+    font-size: 12px;
+    min-width: 500px;
+  }
+  th, td {
+    padding: 8px 6px;
+  }
+
+  /* 知识库布局优化 */
+  .kb-layout {
+    flex-direction: column;
+  }
+  .kb-sidebar {
+    width: 100%;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .kb-editor {
+    width: 100%;
+  }
+
+  /* 刷题模式优化 */
+  .practice-actions {
+    flex-direction: column;
+  }
+  .practice-actions .btn {
+    width: 100%;
+  }
+
+  /* 学情分析图表优化 */
+  .chart-container {
+    height: 250px !important;
+  }
+
+  /* 弹窗优化 */
+  .modal-content {
+    width: 95%;
+    max-width: 95%;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* 标签优化 */
+  .tag {
+    font-size: 11px;
+    padding: 2px 6px;
+  }
+
+  /* 统计数字优化 */
+  .stat-value {
+    font-size: 20px;
+  }
+  .stat-label {
+    font-size: 11px;
+  }
+}
+
+/* 超小屏优化 */
+@media (max-width: 480px) {
+  .grid-3, .grid-4 {
+    grid-template-columns: 1fr;
+  }
+  .topbar-actions {
+    gap: 6px;
+  }
+  .countdown-quote {
+    display: none;
+  }
+  .item-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .item-actions .btn {
+    flex: 1;
+    min-width: 80px;
+  }
+}

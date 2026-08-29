@@ -564,6 +564,8 @@ function renderSettings(container) {
   const targets = store.listTargets();
   const activeId = data.activeTargetId;
   const user = auth.currentUser();
+  const lastBackup = store.getLastBackupTime();
+  const daysSinceBackup = lastBackup ? Math.floor((Date.now() - lastBackup) / (1000 * 60 * 60 * 24)) : 0;
 
   container.innerHTML = `
     <div class="section-head"><div><h2>数据与设置</h2><div class="hint">全部数据存于本机浏览器</div></div></div>
@@ -613,11 +615,14 @@ function renderSettings(container) {
         <div class="card-title">存储状态</div>
         <div class="stat-sub" style="margin-bottom:6px">本地占用约 <span class="score-num">${usage}</span>（约 ${storeStat.pct}% / 5MB）</div>
         <div class="stat-sub">试卷 ${data.papers.length} · 错题 ${data.errors.length} · 知识点 ${data.knowledge.length} · 目标院校 ${targets.length}</div>
+        ${lastBackup ? `<div class="stat-sub" style="margin-top:6px">上次备份：${new Date(lastBackup).toLocaleString("zh-CN")}（${daysSinceBackup}天前）</div>` : `<div class="stat-sub" style="margin-top:6px;color:var(--danger);font-weight:600">⚠ 尚未备份过数据，建议立即导出备份</div>`}
         ${storeStat.pct > 85
           ? `<div class="stat-sub" style="margin-top:8px;color:var(--danger);font-weight:600">⚠ 存储已用 ${storeStat.pct}%，建议立即导出备份并清理多余的错题/知识点图片，避免保存失败。</div>`
           : storeStat.pct > 60
             ? `<div class="stat-sub" style="margin-top:8px;color:#a06a00">存储占用已达 ${storeStat.pct}%，上传图片较多时请注意，建议定期导出备份。</div>`
-            : `<div class="stat-sub" style="margin-top:8px;color:var(--ink-mute)">数据仅存于本浏览器，清缓存将丢失，请定期导出备份。</div>`}
+            : daysSinceBackup > 7
+              ? `<div class="stat-sub" style="margin-top:8px;color:#a06a00">已 ${daysSinceBackup} 天未备份，建议定期导出备份防止数据丢失。</div>`
+              : `<div class="stat-sub" style="margin-top:8px;color:var(--ink-mute)">数据仅存于本浏览器，清缓存将丢失，请定期导出备份。</div>`}
       </div>
     </div>
 
