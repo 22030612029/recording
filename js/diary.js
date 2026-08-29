@@ -47,7 +47,7 @@ export function renderDiary(container) {
   container.innerHTML = `
     <div class="diary-wrap">
       <!-- 侧边栏切换按钮 -->
-      <button class="diary-sidebar-toggle" id="diarySidebarToggle" type="button" title="显示/隐藏导航栏">☰</button>
+      <button class="diary-sidebar-toggle" id="diarySidebarToggle" type="button" title="隐藏导航栏">✕</button>
       <!-- 顶部暖心区 -->
       <div class="diary-hero">
         <div class="diary-hero-bg"></div>
@@ -135,12 +135,6 @@ export function renderDiary(container) {
       </div>
     </div>
   `;
-
-  // 默认隐藏侧边栏（小窝沉浸模式）
-  const sidebar = document.querySelector(".sidebar");
-  const appShell = document.querySelector(".app-shell");
-  if (sidebar) sidebar.classList.add("diary-sidebar-hidden");
-  if (appShell) appShell.classList.add("diary-shell-full");
 
   bindEvents(container);
 }
