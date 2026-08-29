@@ -81,23 +81,44 @@ export function initShortcuts({ onSwitchView, onOpenSearch, onSave }) {
 }
 
 /* ============================================================
- * 3. 暗色模式
+ * 3. 主题配色
  * ============================================================ */
 const THEME_KEY = "kaoyan_theme";
 
+// 可用配色方案列表
+export const THEMES = [
+  { id: "warm", name: "暖纸金", desc: "默认暖色调，学院金" },
+  { id: "blue", name: "科技蓝", desc: "清爽蓝灰，科技感" },
+  { id: "green", name: "清新绿", desc: "自然绿意，护眼" },
+  { id: "purple", name: "优雅紫", desc: "神秘紫色，优雅" },
+  { id: "pink", name: "温柔粉", desc: "柔和粉色，温馨" },
+  { id: "dark", name: "深色模式", desc: "暗色护眼，夜间" },
+];
+
 export function getTheme() {
-  return localStorage.getItem(THEME_KEY) || "light";
+  const theme = localStorage.getItem(THEME_KEY);
+  // 兼容旧版本：旧版本默认 "light"，现在改为 "warm"
+  if (theme === "light") return "warm";
+  return theme || "warm";
 }
 
 export function setTheme(theme) {
-  const isDark = theme === "dark";
-  document.documentElement.classList.toggle("dark", isDark);
-  document.documentElement.setAttribute("data-theme", isDark ? "dark" : "light");
-  localStorage.setItem(THEME_KEY, isDark ? "dark" : "light");
+  // 移除所有主题类
+  document.documentElement.classList.remove("dark");
+  // 设置 data-theme 属性
+  document.documentElement.setAttribute("data-theme", theme);
+  // 深色模式额外添加 dark 类（兼容旧代码）
+  if (theme === "dark") {
+    document.documentElement.classList.add("dark");
+  }
+  localStorage.setItem(THEME_KEY, theme);
 }
 
 export function toggleTheme() {
-  const next = getTheme() === "dark" ? "light" : "dark";
+  const current = getTheme();
+  const currentIndex = THEMES.findIndex(t => t.id === current);
+  const nextIndex = (currentIndex + 1) % THEMES.length;
+  const next = THEMES[nextIndex].id;
   setTheme(next);
   return next;
 }

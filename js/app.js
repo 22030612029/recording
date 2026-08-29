@@ -567,8 +567,11 @@ function renderSettings(container) {
     <div class="section-head"><div><h2>数据与设置</h2><div class="hint">全部数据存于本机浏览器</div></div></div>
 
     <div class="card" style="border-top:3px solid var(--accent)">
-      <div class="card-title">目标院校<span class="count">${targets.length}</span></div>
-      <p class="muted" style="font-size:12.5px;margin-bottom:12px">为心仪院校设定各科目标分，学情分析将自动计算「当前差距」并标出需要重点提升的科目。</p>
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>目标院校<span class="count">${targets.length}</span></span>
+        <button class="btn btn-primary btn-sm" id="addTargetBtn">+ 添加目标院校</button>
+      </div>
+      <p class="muted" style="font-size:12.5px;margin-bottom:12px">为心仪院校设定各科目标分，学情分析将自动计算「当前差距」并标出需要重点提升的科目。支持添加多个目标院校，可随时切换当前目标。</p>
 
       <div class="item-list" id="targetList">
         ${targets.length ? targets.map((t) => targetCardHTML(t, activeId)).join("") : `
@@ -579,6 +582,22 @@ function renderSettings(container) {
           </div>`}
       </div>
       <p class="muted" style="font-size:12.5px;margin-top:10px">如需新增目标院校，请回到「仪表盘」顶部操作；此处可切换当前目标、编辑或删除。</p>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">配色方案 <span class="count">点击切换</span></div>
+      <div class="theme-grid" id="themeGrid">
+        ${features.THEMES.map(t => `
+          <div class="theme-card ${features.getTheme() === t.id ? 'active' : ''}" data-theme="${t.id}" title="${t.desc}">
+            <div class="theme-preview" data-theme-preview="${t.id}">
+              <span class="theme-dot" style="background:var(--accent)"></span>
+              <span class="theme-dot" style="background:var(--bg)"></span>
+              <span class="theme-dot" style="background:var(--ink)"></span>
+            </div>
+            <div class="theme-name">${t.name}</div>
+          </div>
+        `).join("")}
+      </div>
     </div>
 
     <div class="split-2" style="margin-top:16px">
@@ -645,6 +664,10 @@ function renderSettings(container) {
     </div>
   `;
 
+  // 添加目标院校
+  const addTargetBtn = container.querySelector("#addTargetBtn");
+  if (addTargetBtn) addTargetBtn.onclick = () => openTargetForm();
+
   // 目标院校（新增入口仅在仪表盘；此处保留切换/编辑/删除）
   container.querySelectorAll("[data-tid]").forEach((b) => {
     if (b.dataset.act === "active") {
@@ -658,6 +681,19 @@ function renderSettings(container) {
         if (ok) { store.deleteTarget(b.dataset.tid); toast("已删除", "ok"); }
       };
     }
+  });
+
+  // 配色方案切换
+  container.querySelectorAll(".theme-card").forEach((card) => {
+    card.onclick = () => {
+      const theme = card.dataset.theme;
+      features.setTheme(theme);
+      // 更新选中状态
+      container.querySelectorAll(".theme-card").forEach(c => c.classList.remove("active"));
+      card.classList.add("active");
+      const themeName = features.THEMES.find(t => t.id === theme)?.name || theme;
+      toast(`已切换到「${themeName}」`, "ok");
+    };
   });
 
   // 总体目标百分比
