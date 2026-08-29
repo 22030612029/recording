@@ -126,16 +126,42 @@ function computeReport() {
   const reasons = Object.entries(reasonMap).map(([r, n]) => ({ reason: r, count: n })).sort((a, b) => b.count - a.count);
   const topReason = reasons[0];
 
+  // 薄弱知识点推荐（掌握度低 + 错题多 = 高优先级）
+  const weakKps = kps
+    .map((k) => {
+      const relatedErrors = errors.filter((e) => e.linkedKpId === k.id).length;
+      const paper = papers.find((p) => p.id === k.paperId);
+      return {
+        id: k.id,
+        title: k.title || k.content?.substring(0, 30) || "未命名知识点",
+        module: k.module,
+        subject: paper?.subject || "—",
+        mastery: store.num(k.mastery),
+        errorCount: relatedErrors,
+        priority: (100 - store.num(k.mastery)) + relatedErrors * 10, // 优先级评分
+      };
+    })
+    .filter((k) => k.mastery < 70) // 只显示掌握度低于70%的
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, 5); // 取前5个
+
+  // 学习计划生成（基于薄弱环节和剩余时间）
+  const examDate = new Date("2026-12-19");
+  const daysLeft = Math.max(1, Math.ceil((examDate - new Date()) / (1000 * 60 * 60 * 24)));
+
   // 评级分布
   const tierDist = { excellent: 0, good: 0, pass: 0, fail: 0 };
   papers.forEach((p) => tierDist[store.getTier(p).key]++);
 
-  return {
+  const report = {
     total: papers.length, errorTotal: errors.length, kpTotal: kps.length,
     overall, target, gap, trend, trendDelta, recentAvg: Math.round(recentAvg * 10) / 10,
     bySubject, best, weakest, weakModule, topReason, reasons, modules, tierDist,
     activeTarget, gapInfo, totalTarget, totalEstimated, totalDiff, urgentCount, midCount,
+    weakKps, daysLeft,
   };
+  report.studyPlan = generateStudyPlan(report, weakKps, daysLeft);
+  return report;
 }
 
 function trendArrow(trend) {
@@ -238,8 +264,120 @@ function reportHTML(r) {
             <button class="btn btn-ghost btn-sm" id="copyReport">复制报告</button>
           </div>
         </div>
+
+        ${r.weakKps && r.weakKps.length > 0 ? `
+        <div class="report-block tone-warn">
+          <h3><span class="glyph">六</span>薄弱知识点推荐 <span class="muted" style="font-weight:400;font-size:13px">（按优先级排序，优先攻克）</span></h3>
+          <div class="weak-kp-list">
+            ${r.weakKps.map((k, i) => `
+              <div class="weak-kp-item">
+                <div class="weak-kp-rank">${i + 1}</div>
+                <div class="weak-kp-info">
+                  <div class="weak-kp-title">${esc(k.title)}</div>
+                  <div class="weak-kp-meta">
+                    <span class="tag tag-ink">${esc(k.subject)}</span>
+                    <span class="tag tag-accent">${esc(k.module)}</span>
+                    <span class="muted">掌握度 <b style="color:${k.mastery < 40 ? 'var(--danger)' : k.mastery < 60 ? 'var(--tier-pass)' : 'var(--tier-good)'}">${k.mastery}%</b></span>
+                    ${k.errorCount > 0 ? `<span class="muted">相关错题 <b>${k.errorCount}</b> 道</span>` : ""}
+                  </div>
+                </div>
+                <div class="weak-kp-bar">
+                  <div class="weak-kp-bar-fill" style="width:${k.mastery}%;background:${k.mastery < 40 ? 'var(--danger)' : k.mastery < 60 ? 'var(--tier-pass)' : 'var(--tier-good)'}"></div>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </div>` : ""}
+
+        ${r.studyPlan && r.studyPlan.length > 0 ? `
+        <div class="report-block tone-accent">
+          <h3><span class="glyph">七</span>学习计划 <span class="muted" style="font-weight:400;font-size:13px">（距考研 ${r.daysLeft} 天）</span></h3>
+          <div class="study-plan-list">
+            ${r.studyPlan.map((p) => `
+              <div class="study-plan-item">
+                <div class="study-plan-header">
+                  <span class="study-plan-phase">${esc(p.phase)}</span>
+                  <span class="study-plan-time">${esc(p.time)}</span>
+                </div>
+                <div class="study-plan-focus">${esc(p.focus)}</div>
+                <ul class="study-plan-tasks">
+                  ${p.tasks.map((t) => `<li>${esc(t)}</li>`).join("")}
+                </ul>
+              </div>
+            `).join("")}
+          </div>
+        </div>` : ""}
       </div>
     </div>`;
+}
+
+/* 生成学习计划 */
+function generateStudyPlan(r, weakKps, daysLeft) {
+  const plan = [];
+  const weeksLeft = Math.ceil(daysLeft / 7);
+
+  // 阶段划分
+  if (daysLeft > 60) {
+    plan.push({
+      phase: "基础强化期",
+      time: `未来 ${Math.min(4, Math.floor(weeksLeft / 2))} 周`,
+      focus: "系统梳理知识点，重点突破薄弱模块",
+      tasks: [
+        `每周完成 2-3 套真题/模拟卷，认真订正`,
+        weakKps.length > 0 ? `重点攻克 ${weakKps.slice(0, 3).map(k => `「${k.module}」`).join("、")} 等薄弱知识点` : "按章节系统过一遍基础知识",
+        "每日整理错题，关联对应知识点",
+      ],
+    });
+    plan.push({
+      phase: "冲刺提升期",
+      time: `考前 4-8 周`,
+      focus: "限时训练 + 错题复盘 + 查漏补缺",
+      tasks: [
+        "每日一套限时训练，模拟真实考试节奏",
+        "每周集中清理一次错题本",
+        "针对高频错因进行专项训练",
+      ],
+    });
+  } else if (daysLeft > 30) {
+    plan.push({
+      phase: "冲刺提升期",
+      time: `未来 ${Math.min(4, weeksLeft)} 周`,
+      focus: "限时训练 + 错题复盘",
+      tasks: [
+        "每日一套限时训练，保持手感",
+        weakKps.length > 0 ? `优先复习 ${weakKps.slice(0, 2).map(k => `「${k.module}」`).join("、")}` : "重点复习高频考点",
+        "每周清理错题本，标记已掌握",
+      ],
+    });
+  }
+
+  plan.push({
+    phase: "考前冲刺期",
+    time: "最后 2-4 周",
+    focus: "回归基础 + 模拟考试 + 心态调整",
+    tasks: [
+      "回归课本和笔记，巩固基础概念",
+      "每周 2 套全真模拟，严格限时",
+      "保持作息规律，调整考试状态",
+      "复习已标记的重点错题",
+    ],
+  });
+
+  // 每日建议
+  const dailyHours = r.gap > 10 ? 6 : r.gap > 5 ? 5 : 4;
+  plan.push({
+    phase: "每日学习建议",
+    time: `每天约 ${dailyHours} 小时`,
+    focus: "高效利用时间，均衡发展",
+    tasks: [
+      r.weakest ? `${r.weakest.subject} 分配 ${Math.ceil(dailyHours * 0.35)} 小时（薄弱科目重点突破）` : "各科均衡分配时间",
+      r.best ? `${r.best.subject} 分配 ${Math.ceil(dailyHours * 0.2)} 小时（保持优势）` : "",
+      "每日 30 分钟错题复盘",
+      "每周日晚上做周总结和下周计划",
+    ].filter(Boolean),
+  });
+
+  return plan;
 }
 
 function buildSuggestions(r) {
