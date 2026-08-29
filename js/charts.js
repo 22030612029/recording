@@ -13,7 +13,7 @@ export function ensureEcharts() {
   if (echartsPromise) return echartsPromise;
   echartsPromise = new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = "../lib/echarts.min.js";
+    s.src = "lib/echarts.min.js";
     s.onload = () => resolve(true);
     s.onerror = () => { echartsPromise = null; reject(new Error("ECharts 加载失败")); };
     document.head.appendChild(s);
