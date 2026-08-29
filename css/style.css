@@ -749,6 +749,92 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
   object-fit: cover; border-radius: var(--r-sm);
   border: 1px solid var(--line); margin-top: 8px; cursor: zoom-in;
 }
+
+/* ---------- 刷题模式 ---------- */
+.practice-mode { max-width: 760px; margin: 0 auto; }
+.practice-header {
+  display: flex; align-items: center; gap: 16px;
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.practice-progress {
+  flex: 1; min-width: 200px; height: 8px;
+  background: var(--bg-2); border-radius: 4px; overflow: hidden;
+}
+.practice-progress-bar {
+  height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border-radius: 4px; transition: width .3s ease;
+}
+.practice-stats {
+  display: flex; gap: 16px; font-size: 13px; color: var(--ink-soft);
+}
+.practice-stats .stat-mastered { color: var(--tier-excellent); font-weight: 600; }
+.practice-stats .stat-review { color: var(--tier-pass); font-weight: 600; }
+
+.practice-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 24px; margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.practice-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.practice-question {
+  font-size: 17px; font-weight: 600; color: var(--ink);
+  line-height: 1.7; margin-bottom: 16px;
+}
+.practice-img {
+  display: block; max-width: 100%; max-height: 360px;
+  border-radius: var(--r-sm); border: 1px solid var(--line);
+  margin: 0 auto 16px; cursor: zoom-in;
+}
+.practice-answer-hidden {
+  text-align: center; padding: 24px 0;
+  border-top: 1px dashed var(--line); margin-top: 16px;
+}
+.practice-answer {
+  border-top: 1px dashed var(--line); padding-top: 16px; margin-top: 16px;
+}
+.answer-row { margin-bottom: 8px; font-size: 14px; }
+.answer-label { color: var(--ink-mute); font-weight: 500; }
+.answer-wrong { color: var(--tier-fail); font-weight: 600; }
+.answer-correct { color: var(--tier-excellent); font-weight: 600; }
+.answer-analysis {
+  margin-top: 12px; padding: 12px; background: var(--surface-2);
+  border-radius: var(--r-sm); font-size: 13.5px; line-height: 1.7;
+  color: var(--ink-2);
+}
+
+.practice-actions {
+  display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+}
+.practice-actions .btn { min-width: 140px; }
+
+/* 刷题完成 */
+.practice-complete { max-width: 600px; margin: 40px auto; }
+.complete-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 40px; text-align: center;
+  box-shadow: var(--shadow);
+}
+.complete-icon { font-size: 64px; margin-bottom: 16px; }
+.complete-card h2 { font-size: 24px; margin-bottom: 24px; color: var(--ink); }
+.complete-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 16px; margin-bottom: 32px;
+}
+.complete-stat {
+  padding: 16px; background: var(--surface-2);
+  border-radius: var(--r-sm);
+}
+.stat-num {
+  font-size: 28px; font-weight: 700; color: var(--accent);
+  font-family: var(--ff-mono);
+}
+.stat-label { font-size: 12px; color: var(--ink-mute); margin-top: 4px; }
+.complete-actions { display: flex; gap: 12px; justify-content: center; }
+
+@media (max-width: 640px) {
+  .complete-stats { grid-template-columns: repeat(2, 1fr); }
+  .practice-stats { font-size: 12px; gap: 10px; }
+}
 .img-pick { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .img-pick .img-prev {
   max-width: 100%; max-height: 240px; border-radius: var(--r-sm);
@@ -1498,6 +1584,14 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 }
 .kb-save-dot.dirty { background: #ff9800; }
 .kb-auto-save { margin-left: auto; }
+.kb-stats {
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+}
 
 /* ---------- 空状态 ---------- */
 .kb-empty-editor {

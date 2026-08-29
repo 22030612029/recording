@@ -9,6 +9,13 @@ let activeSub = "errors";
 let filter = { q: "", subject: "", module: "", reason: "", type: "", kSort: "new", tag: "" };
 let qTimer = null;
 
+/* 刷题模式状态 */
+let practiceMode = false;
+let practiceQueue = [];
+let practiceIndex = 0;
+let practiceStats = { total: 0, answered: 0, mastered: 0, review: 0 };
+let practiceShowAnswer = false;
+
 /* 解析逗号分隔的标签字符串为去重数组 */
 function parseTags(str) {
   if (!str) return [];
@@ -74,6 +81,7 @@ export function renderKnowledge(container) {
             </select>`}
       </div>
       <div class="search"><input class="input" id="kQ" type="search" placeholder="搜索内容" value="${esc(filter.q)}" /></div>
+      ${activeSub === "errors" && data.errors.length > 0 ? `<button class="btn btn-ghost" id="practiceBtn" style="margin-right:8px">🎯 刷题模式</button>` : ""}
       <button class="btn btn-primary" id="kAdd">${activeSub === "errors" ? "+ 错题" : "+ 知识点"}</button>
     </div>
 
@@ -89,6 +97,8 @@ export function renderKnowledge(container) {
   });
   container.querySelector("#kAdd").onclick = () =>
     activeSub === "errors" ? openErrorForm() : openKnowledgeForm();
+  const practiceBtn = container.querySelector("#practiceBtn");
+  if (practiceBtn) practiceBtn.onclick = () => startPracticeMode(container);
   const q = container.querySelector("#kQ");
   q.oninput = (e) => {
     filter.q = e.target.value;
@@ -543,4 +553,177 @@ function emptyHTML(ico, title, desc) {
       <div class="empty-ico">${ico === "错题" ? "✎" : "◈"}</div>
       <h3>${title}</h3><p>${desc}</p>
     </div></div>`;
+}
+
+/* ============================================================
+ * 刷题模式
+ * ============================================================ */
+function startPracticeMode(container) {
+  const data = store.getData();
+  // 根据当前筛选条件过滤错题
+  let list = data.errors.filter((e) => {
+    const p = paperOf(e.paperId);
+    if (filter.subject && p?.subject !== filter.subject) return false;
+    if (filter.module && e.module !== filter.module) return false;
+    if (filter.reason && e.reason !== filter.reason) return false;
+    return true;
+  });
+
+  if (!list.length) {
+    toast("当前筛选条件下没有错题", "warn");
+    return;
+  }
+
+  // 随机打乱顺序
+  practiceQueue = [...list].sort(() => Math.random() - 0.5);
+  practiceIndex = 0;
+  practiceStats = { total: practiceQueue.length, answered: 0, mastered: 0, review: 0 };
+  practiceShowAnswer = false;
+  practiceMode = true;
+
+  renderPracticeMode(container);
+}
+
+function renderPracticeMode(container) {
+  const wrap = container.querySelector("#kListWrap");
+  const current = practiceQueue[practiceIndex];
+  const p = paperOf(current.paperId);
+  const progress = Math.round(((practiceIndex + 1) / practiceQueue.length) * 100);
+
+  wrap.innerHTML = `
+    <div class="practice-mode">
+      <div class="practice-header">
+        <div class="practice-progress">
+          <div class="practice-progress-bar" style="width:${progress}%"></div>
+        </div>
+        <div class="practice-stats">
+          <span>第 ${practiceIndex + 1}/${practiceQueue.length} 题</span>
+          <span class="stat-mastered">✓ 已掌握 ${practiceStats.mastered}</span>
+          <span class="stat-review">↻ 需复习 ${practiceStats.review}</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="exitPractice">退出刷题</button>
+      </div>
+
+      <div class="practice-card">
+        <div class="practice-tags">
+          <span class="tag tag-danger">${esc(current.reason)}</span>
+          <span class="tag tag-ink">${esc(p?.subject || "—")}</span>
+          <span class="tag tag-accent">${esc(current.module)}</span>
+        </div>
+        <div class="practice-question">${esc(current.question)}</div>
+        ${current.image ? `<img class="practice-img" src="${current.image}" alt="题目图片" data-view-img />` : ""}
+
+        ${practiceShowAnswer ? `
+          <div class="practice-answer">
+            <div class="answer-row"><span class="answer-label">误选：</span><span class="answer-wrong">${esc(current.wrongOption) || "—"}</span></div>
+            <div class="answer-row"><span class="answer-label">正解：</span><span class="answer-correct">${esc(current.correctAnswer) || "—"}</span></div>
+            ${current.analysis ? `<div class="answer-analysis"><span class="answer-label">解析：</span>${esc(current.analysis)}</div>` : ""}
+          </div>
+        ` : `
+          <div class="practice-answer-hidden">
+            <button class="btn btn-primary" id="showAnswerBtn">显示答案</button>
+          </div>
+        `}
+      </div>
+
+      <div class="practice-actions">
+        ${practiceShowAnswer ? `
+          <button class="btn btn-success" id="markMastered">✓ 已掌握</button>
+          <button class="btn btn-warning" id="markReview">↻ 需要复习</button>
+        ` : ""}
+        <button class="btn btn-ghost" id="skipQuestion">跳过 →</button>
+      </div>
+    </div>
+  `;
+
+  // 绑定事件
+  wrap.querySelector("#exitPractice").onclick = () => exitPracticeMode(container);
+  wrap.querySelector("#skipQuestion").onclick = () => practiceNext(container);
+
+  if (practiceShowAnswer) {
+    wrap.querySelector("#markMastered").onclick = () => {
+      practiceStats.mastered++;
+      practiceStats.answered++;
+      // 标记错题为已掌握
+      const data = store.getData();
+      const err = data.errors.find(e => e.id === current.id);
+      if (err) { err.mastered = true; store.save(); }
+      practiceNext(container);
+    };
+    wrap.querySelector("#markReview").onclick = () => {
+      practiceStats.review++;
+      practiceStats.answered++;
+      practiceNext(container);
+    };
+  } else {
+    wrap.querySelector("#showAnswerBtn").onclick = () => {
+      practiceShowAnswer = true;
+      renderPracticeMode(container);
+    };
+  }
+
+  // 图片预览
+  wrap.querySelectorAll("[data-view-img]").forEach((img) => {
+    img.onclick = () => openImagePreview(img.src);
+  });
+}
+
+function practiceNext(container) {
+  practiceIndex++;
+  practiceShowAnswer = false;
+
+  if (practiceIndex >= practiceQueue.length) {
+    // 刷题完成
+    renderPracticeComplete(container);
+    return;
+  }
+
+  renderPracticeMode(container);
+}
+
+function renderPracticeComplete(container) {
+  const wrap = container.querySelector("#kListWrap");
+  const masteryRate = practiceStats.total > 0 ? Math.round((practiceStats.mastered / practiceStats.total) * 100) : 0;
+
+  wrap.innerHTML = `
+    <div class="practice-complete">
+      <div class="complete-card">
+        <div class="complete-icon">🎉</div>
+        <h2>刷题完成！</h2>
+        <div class="complete-stats">
+          <div class="complete-stat">
+            <div class="stat-num">${practiceStats.total}</div>
+            <div class="stat-label">总题数</div>
+          </div>
+          <div class="complete-stat">
+            <div class="stat-num">${practiceStats.mastered}</div>
+            <div class="stat-label">已掌握</div>
+          </div>
+          <div class="complete-stat">
+            <div class="stat-num">${practiceStats.review}</div>
+            <div class="stat-label">需复习</div>
+          </div>
+          <div class="complete-stat">
+            <div class="stat-num">${masteryRate}%</div>
+            <div class="stat-label">掌握率</div>
+          </div>
+        </div>
+        <div class="complete-actions">
+          <button class="btn btn-primary" id="restartPractice">再来一轮</button>
+          <button class="btn btn-ghost" id="backToList">返回错题本</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  wrap.querySelector("#restartPractice").onclick = () => startPracticeMode(container);
+  wrap.querySelector("#backToList").onclick = () => exitPracticeMode(container);
+}
+
+function exitPracticeMode(container) {
+  practiceMode = false;
+  practiceQueue = [];
+  practiceIndex = 0;
+  practiceShowAnswer = false;
+  rerender(container);
 }

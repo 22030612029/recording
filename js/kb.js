@@ -307,6 +307,7 @@ $$公式$$
         <span class="kb-save-dot" id="kbSaveDot"></span>
         <span id="kbSaveState">已保存</span>
         <span class="kb-auto-save">自动保存 · 10秒</span>
+        <span class="kb-stats" id="kbStats"></span>
       </div>
     </div>
   `;
@@ -399,6 +400,7 @@ function bindEditorEvents(editor, container) {
   const pv = editor.querySelector("#kbPreview");
   const dot = editor.querySelector("#kbSaveDot");
   const saveState = editor.querySelector("#kbSaveState");
+  const titleInput = editor.querySelector("#kbTitle");
   const note = store.getKbNode(state.selectedId);
   if (!note) return;
 
@@ -409,6 +411,16 @@ function bindEditorEvents(editor, container) {
       img.style.cursor = "zoom-in";
       img.onclick = () => openImageViewer(img.src, img.alt);
     });
+    updateStats();
+  };
+  const updateStats = () => {
+    const statsEl = editor.querySelector("#kbStats");
+    if (!statsEl) return;
+    const text = ta.value;
+    const chars = text.length;
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const readTime = Math.max(1, Math.ceil(chars / 400));
+    statsEl.textContent = `${chars} 字 · ${words} 词 · 约 ${readTime} 分钟阅读`;
   };
   const markDirty = (label) => { dot.classList.add("dirty"); saveState.textContent = label || "编辑中…"; };
   const markSaved = (t) => { dot.classList.remove("dirty"); saveState.textContent = t || "已保存"; };
@@ -435,6 +447,50 @@ function bindEditorEvents(editor, container) {
     refreshPreview();
     markDirty();
     saveContent();
+  });
+
+  // 在选中文本前后包裹字符
+  const wrapSelection = (before, after) => {
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const selected = ta.value.slice(s, e);
+    ta.value = ta.value.slice(0, s) + before + selected + after + ta.value.slice(e);
+    ta.selectionStart = s + before.length;
+    ta.selectionEnd = e + before.length;
+    ta.dispatchEvent(new Event("input"));
+  };
+
+  // 快捷键支持
+  ta.addEventListener("keydown", (ev) => {
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === "s") {
+      ev.preventDefault();
+      clearTimeout(saveTimer);
+      store.updateKbNode(note.id, { content: ta.value, title: titleInput?.value });
+      markSaved("已保存 · " + new Date().toLocaleTimeString());
+      toast("已保存", "ok");
+      return;
+    }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === "b") {
+      ev.preventDefault();
+      wrapSelection("**", "**");
+      return;
+    }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === "i") {
+      ev.preventDefault();
+      wrapSelection("*", "*");
+      return;
+    }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === "k") {
+      ev.preventDefault();
+      wrapSelection("[", "](链接)");
+      return;
+    }
+    if (ev.key === "Tab") {
+      ev.preventDefault();
+      const s = ta.selectionStart, e = ta.selectionEnd;
+      ta.value = ta.value.slice(0, s) + "  " + ta.value.slice(e);
+      ta.selectionStart = ta.selectionEnd = s + 2;
+      ta.dispatchEvent(new Event("input"));
+    }
   });
 
   // 粘贴图片
@@ -467,7 +523,6 @@ function bindEditorEvents(editor, container) {
   });
 
   // 标题自动保存
-  const titleInput = editor.querySelector("#kbTitle");
   if (titleInput) {
     titleInput.addEventListener("input", () => {
       markDirty("标题编辑中…");
