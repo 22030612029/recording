@@ -365,7 +365,8 @@ img { max-width: 100%; display: block; }
   padding: 4px 16px;
   border-left: 1px solid var(--line);
   border-right: 1px solid var(--line);
-  min-width: 280px;
+  min-width: 380px;
+  max-width: 480px;
 }
 .countdown-main {
   display: flex;
@@ -395,13 +396,18 @@ img { max-width: 100%; display: block; }
   margin: 0 4px;
 }
 .countdown-quote {
-  font-size: 11px;
-  color: var(--ink-mute);
-  max-width: 160px;
+  font-size: 12px;
+  color: var(--ink-2);
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+  cursor: help;
+  transition: color .2s ease;
+}
+.countdown-quote:hover {
+  color: var(--accent);
 }
 
 /* 暗色模式倒计时 */

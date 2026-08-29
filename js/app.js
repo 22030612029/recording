@@ -240,7 +240,9 @@ function initCountdown() {
     const startOfYear = new Date(now.getFullYear(), 0, 0);
     const dayOfYear = Math.floor((now - startOfYear) / (1000 * 60 * 60 * 24));
     const quoteIndex = dayOfYear % DAILY_QUOTES.length;
-    quoteEl.textContent = DAILY_QUOTES[quoteIndex];
+    const quoteText = DAILY_QUOTES[quoteIndex];
+    quoteEl.textContent = quoteText;
+    quoteEl.title = quoteText;  // 鼠标悬停显示完整文案
   }
 
   update();
