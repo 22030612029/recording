@@ -155,7 +155,8 @@ export function renderReviewPanel(container) {
       <div class="review-empty">
         <div class="review-empty-ico">✓</div>
         <h3>今日复习已完成</h3>
-        <p>共 ${stats.total} 道错题，已完成 ${stats.completed} 道全部轮次</p>
+        <p>共 ${stats.total} 项（错题+知识点），已完成 ${stats.completed} 项全部轮次，掌握率 ${stats.masteryRate}%</p>
+        <p class="muted" style="font-size:12px;margin-top:8px">今日已复习 ${stats.todayReviewed} 项</p>
       </div>`;
     return;
   }
@@ -163,33 +164,52 @@ export function renderReviewPanel(container) {
   container.innerHTML = `
     <div class="review-head">
       <div class="review-title">今日待复习 <span class="review-count">${due.length}</span></div>
-      <div class="review-stats">已完成 ${stats.completed} / ${stats.total} · 今日已复习 ${stats.todayReviewed}</div>
+      <div class="review-stats">
+        <span class="review-tag">错题 ${stats.dueErrors}</span>
+        <span class="review-tag">知识点 ${stats.dueKnowledge}</span>
+        <span>已完成 ${stats.completed} / ${stats.total} · 今日已复习 ${stats.todayReviewed}</span>
+      </div>
     </div>
     <div class="review-list">
-      ${due.map((e, i) => `
-        <div class="review-item" data-id="${e.id}">
-          <div class="review-item-num">${i + 1}</div>
+      ${due.map((item, i) => {
+        const isError = item.reviewType === "error";
+        const title = isError ? (item.question || "(无题干)") : (item.content || "(无内容)");
+        const typeLabel = isError ? "错题" : "知识点";
+        const typeColor = isError ? "var(--danger)" : "var(--accent)";
+        return `
+        <div class="review-item" data-id="${item.id}">
+          <div class="review-item-num" style="background:${typeColor}">${i + 1}</div>
           <div class="review-item-body">
-            <div class="review-item-q">${escHtml(e.question.slice(0, 80) || "(无题干)")}</div>
+            <div class="review-item-type" style="color:${typeColor}">${typeLabel} · ${escHtml(item.module || "未分类")}</div>
+            <div class="review-item-q">${escHtml(title.slice(0, 100))}${title.length > 100 ? "..." : ""}</div>
             <div class="review-item-meta">
-              <span class="review-tag">${escHtml(e.module || "未分类")}</span>
-              <span class="review-reason">${escHtml(e.reason || "")}</span>
-              <span class="review-stage">第 ${(e.reviewStage || 0) + 1} 轮</span>
+              ${isError && item.reason ? `<span class="review-reason">错因：${escHtml(item.reason)}</span>` : ""}
+              ${!isError && item.mastery != null ? `<span class="review-reason">掌握度：${item.mastery}%</span>` : ""}
+              <span class="review-stage">第 ${(item.reviewStage || 0) + 1} 轮</span>
+              ${item.reviewCount ? `<span class="review-stage">已复习 ${item.reviewCount} 次</span>` : ""}
             </div>
-            ${e.correctAnswer ? `<div class="review-item-answer">正确答案：${escHtml(e.correctAnswer)}</div>` : ""}
+            ${isError && item.correctAnswer ? `<div class="review-item-answer">正确答案：${escHtml(item.correctAnswer)}</div>` : ""}
+            ${!isError && item.image ? `<img src="${item.image}" class="review-item-img" alt="知识点图片" />` : ""}
           </div>
           <div class="review-item-actions">
-            <button class="btn btn-primary btn-sm review-done" data-id="${e.id}">已掌握</button>
-            <button class="btn btn-ghost btn-sm review-snooze" data-id="${e.id}">稍后</button>
+            <button class="btn btn-primary btn-sm review-remember" data-id="${item.id}">记住了</button>
+            <button class="btn btn-ghost btn-sm review-forget" data-id="${item.id}">没记住</button>
+            <button class="btn btn-ghost btn-sm review-snooze" data-id="${item.id}">稍后</button>
           </div>
-        </div>
-      `).join("")}
+        </div>`;
+      }).join("")}
     </div>`;
 
   // 绑定事件
-  container.querySelectorAll(".review-done").forEach((btn) => {
+  container.querySelectorAll(".review-remember").forEach((btn) => {
     btn.onclick = () => {
-      store.markReviewed(btn.dataset.id);
+      store.markReviewed(btn.dataset.id, true);
+      renderReviewPanel(container);
+    };
+  });
+  container.querySelectorAll(".review-forget").forEach((btn) => {
+    btn.onclick = () => {
+      store.markReviewed(btn.dataset.id, false);
       renderReviewPanel(container);
     };
   });

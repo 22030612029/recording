@@ -1960,12 +1960,18 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   font-weight: 700; border-radius: 50%;
 }
 .review-item-body { flex: 1; min-width: 0; }
+.review-item-type { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
 .review-item-q { font-size: 14px; color: var(--ink); line-height: 1.5; margin-bottom: 6px; }
 .review-item-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .review-tag { font-size: 11px; padding: 2px 8px; background: var(--accent-soft); color: var(--accent); border-radius: var(--r-pill); }
 .review-reason { font-size: 11px; padding: 2px 8px; background: var(--tier-fail-bg); color: var(--tier-fail); border-radius: var(--r-pill); }
 .review-stage { font-size: 11px; padding: 2px 8px; background: var(--surface); color: var(--ink-soft); border-radius: var(--r-pill); border: 1px solid var(--line); }
 .review-item-answer { font-size: 12.5px; color: var(--ok); margin-top: 6px; }
+.review-item-img {
+  display: block; max-width: 200px; max-height: 150px;
+  margin-top: 8px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); object-fit: cover;
+}
 .review-item-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
 .review-empty { text-align: center; padding: 30px 20px; }
 .review-empty-ico {
@@ -1980,6 +1986,95 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* ============================================================
    小窝 · 日记总结
    ============================================================ */
+.pomodoro-card { margin-top: 16px; }
+.pomodoro-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px; flex-wrap: wrap; gap: 8px;
+}
+.pomodoro-head h3 { font-size: 16px; margin: 0; }
+.pomodoro-stats { display: flex; gap: 16px; font-size: 13px; color: var(--ink-soft); }
+.pomodoro-stats b { color: var(--accent); font-family: var(--ff-mono); }
+
+.pomodoro-body {
+  display: flex; gap: 24px; align-items: center;
+  flex-wrap: wrap; justify-content: center;
+}
+.pomodoro-timer-wrap {
+  position: relative; width: 200px; height: 200px;
+  flex-shrink: 0;
+}
+.pomodoro-circle { width: 100%; height: 100%; }
+.pomodoro-circle-fg {
+  transition: stroke-dashoffset 0.3s ease;
+}
+.pomodoro-timer {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.pomodoro-time {
+  font-family: var(--ff-mono); font-size: 36px;
+  font-weight: 700; color: var(--ink);
+}
+.pomodoro-mode {
+  font-size: 13px; color: var(--ink-soft); margin-top: 4px;
+}
+
+.pomodoro-controls { flex: 1; min-width: 240px; }
+.pomodoro-mode-tabs {
+  display: flex; gap: 8px; margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.pomodoro-tab {
+  padding: 8px 14px; border: 1px solid var(--line);
+  background: var(--surface); border-radius: var(--r-pill);
+  font-size: 13px; cursor: pointer; transition: all 0.2s ease;
+  color: var(--ink-soft);
+}
+.pomodoro-tab:hover { border-color: var(--accent); color: var(--accent); }
+.pomodoro-tab.active {
+  background: var(--accent); color: white;
+  border-color: var(--accent);
+}
+.pomodoro-buttons { display: flex; gap: 10px; }
+.pomodoro-buttons .btn { flex: 1; }
+
+.pomodoro-week { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.pomodoro-week-title {
+  font-size: 14px; font-weight: 600; color: var(--ink);
+  margin-bottom: 12px;
+}
+.pomodoro-week-chart {
+  display: flex; gap: 8px; align-items: flex-end;
+  height: 120px;
+}
+.pomo-week-bar {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; height: 100%; justify-content: flex-end;
+  position: relative;
+}
+.pomo-week-bar-fill {
+  width: 100%; max-width: 32px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  border-radius: 4px 4px 0 0;
+  min-height: 2px;
+  transition: height 0.3s ease;
+}
+.pomo-week-bar-label {
+  font-size: 11px; color: var(--ink-mute); margin-top: 6px;
+}
+.pomo-week-bar-value {
+  position: absolute; top: -18px;
+  font-size: 10px; color: var(--ink-soft);
+  font-family: var(--ff-mono);
+}
+
+@media (max-width: 640px) {
+  .pomodoro-body { flex-direction: column; }
+  .pomodoro-timer-wrap { width: 160px; height: 160px; }
+  .pomodoro-time { font-size: 28px; }
+  .pomodoro-stats { font-size: 12px; gap: 10px; }
+}
 .diary-wrap { display: flex; flex-direction: column; gap: 18px; }
 
 /* 顶部暖心区 */

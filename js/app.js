@@ -1191,5 +1191,6 @@ function init() {
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
 } else {
-  init();
+  // 延迟执行，避免循环依赖导致的暂时性死区（TDZ）错误
+  setTimeout(init, 0);
 }

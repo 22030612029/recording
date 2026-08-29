@@ -35,6 +35,13 @@ const MILESTONES = [3, 7, 14, 30, 60, 100, 200, 365];
 /* ---------- 模块状态 ---------- */
 let todayDiary = null;
 
+/* ---------- 番茄钟状态 ---------- */
+let pomoTimer = null;
+let pomoSecondsLeft = 25 * 60;
+let pomoTotalSeconds = 25 * 60;
+let pomoMode = "focus";
+let pomoRunning = false;
+
 /* ---------- 主渲染 ---------- */
 export function renderDiary(container) {
   const stats = store.getDiaryStats();
@@ -78,6 +85,43 @@ export function renderDiary(container) {
           <div class="diary-stat-icon">✍️</div>
           <div class="diary-stat-value">${stats.totalWords}</div>
           <div class="diary-stat-label">累计字数</div>
+        </div>
+      </div>
+
+      <div class="card pomodoro-card">
+        <div class="pomodoro-head">
+          <h3>🍅 番茄钟</h3>
+          <div class="pomodoro-stats">
+            <span>今日 <b id="pomoTodayHours">0</b> 小时</span>
+            <span>连续 <b id="pomoStreak">0</b> 天</span>
+          </div>
+        </div>
+        <div class="pomodoro-body">
+          <div class="pomodoro-timer-wrap">
+            <svg class="pomodoro-circle" viewBox="0 0 200 200">
+              <circle class="pomodoro-circle-bg" cx="100" cy="100" r="90" fill="none" stroke="var(--line)" stroke-width="8"/>
+              <circle class="pomodoro-circle-fg" id="pomoCircleFg" cx="100" cy="100" r="90" fill="none" stroke="var(--accent)" stroke-width="8" stroke-linecap="round" stroke-dasharray="565.48" stroke-dashoffset="0" transform="rotate(-90 100 100)"/>
+            </svg>
+            <div class="pomodoro-timer">
+              <div class="pomodoro-time" id="pomoTime">25:00</div>
+              <div class="pomodoro-mode" id="pomoMode">专注时间</div>
+            </div>
+          </div>
+          <div class="pomodoro-controls">
+            <div class="pomodoro-mode-tabs">
+              <button class="pomodoro-tab active" data-mode="focus" data-minutes="25">专注 25分</button>
+              <button class="pomodoro-tab" data-mode="short" data-minutes="5">短休 5分</button>
+              <button class="pomodoro-tab" data-mode="long" data-minutes="15">长休 15分</button>
+            </div>
+            <div class="pomodoro-buttons">
+              <button class="btn btn-primary" id="pomoStartBtn">开始</button>
+              <button class="btn btn-ghost" id="pomoResetBtn">重置</button>
+            </div>
+          </div>
+        </div>
+        <div class="pomodoro-week">
+          <div class="pomodoro-week-title">最近 7 天学习时长</div>
+          <div class="pomodoro-week-chart" id="pomoWeekChart"></div>
         </div>
       </div>
 
@@ -210,6 +254,134 @@ function bindEvents(container) {
       deleteDiaryItem(id, container);
     }
   };
+
+  // 番茄钟事件
+  initPomodoro(container);
+}
+
+/* ---------- 番茄钟 ---------- */
+function initPomodoro(container) {
+  const timeEl = container.querySelector("#pomoTime");
+  const modeEl = container.querySelector("#pomoMode");
+  const circleFg = container.querySelector("#pomoCircleFg");
+  const startBtn = container.querySelector("#pomoStartBtn");
+  const resetBtn = container.querySelector("#pomoResetBtn");
+  const tabs = container.querySelectorAll(".pomodoro-tab");
+  const todayHoursEl = container.querySelector("#pomoTodayHours");
+  const streakEl = container.querySelector("#pomoStreak");
+  const weekChart = container.querySelector("#pomoWeekChart");
+
+  if (!timeEl || !startBtn) return;
+
+  const CIRCUMFERENCE = 2 * Math.PI * 90; // 565.48
+
+  // 更新显示
+  const updateDisplay = () => {
+    const mins = Math.floor(pomoSecondsLeft / 60);
+    const secs = pomoSecondsLeft % 60;
+    timeEl.textContent = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    const progress = pomoTotalSeconds > 0 ? pomoSecondsLeft / pomoTotalSeconds : 0;
+    circleFg.style.strokeDashoffset = CIRCUMFERENCE * (1 - progress);
+    modeEl.textContent = pomoMode === "focus" ? "专注时间" : pomoMode === "short" ? "短休息" : "长休息";
+  };
+
+  // 更新统计
+  const updateStats = () => {
+    const stats = store.getPomodoroStats();
+    todayHoursEl.textContent = stats.todayHours;
+    streakEl.textContent = stats.streak;
+    // 渲染周图表
+    if (weekChart) {
+      const maxMinutes = Math.max(...stats.last7Days.map(d => d.minutes), 60);
+      weekChart.innerHTML = stats.last7Days.map(d => {
+        const height = maxMinutes > 0 ? (d.minutes / maxMinutes) * 100 : 0;
+        const hours = (d.minutes / 60).toFixed(1);
+        return `
+          <div class="pomo-week-bar" title="${d.date}: ${d.minutes}分钟 (${hours}小时)">
+            <div class="pomo-week-bar-fill" style="height:${height}%"></div>
+            <div class="pomo-week-bar-label">${d.date.slice(5)}</div>
+            <div class="pomo-week-bar-value">${hours}h</div>
+          </div>`;
+      }).join("");
+    }
+  };
+
+  // 开始/暂停
+  startBtn.onclick = () => {
+    if (pomoRunning) {
+      // 暂停
+      clearInterval(pomoTimer);
+      pomoRunning = false;
+      startBtn.textContent = "继续";
+    } else {
+      // 开始
+      pomoRunning = true;
+      startBtn.textContent = "暂停";
+      pomoTimer = setInterval(() => {
+        pomoSecondsLeft--;
+        updateDisplay();
+        if (pomoSecondsLeft <= 0) {
+          clearInterval(pomoTimer);
+          pomoRunning = false;
+          startBtn.textContent = "开始";
+          // 记录会话
+          if (pomoMode === "focus") {
+            store.addPomodoroSession(Math.round(pomoTotalSeconds / 60), "focus");
+            toast("专注完成！休息一下吧 🍅", "ok");
+          } else {
+            store.addPomodoroSession(Math.round(pomoTotalSeconds / 60), "break");
+            toast("休息结束，继续加油！", "ok");
+          }
+          updateStats();
+          // 自动切换到下一个模式
+          if (pomoMode === "focus") {
+            pomoMode = "short";
+            pomoSecondsLeft = 5 * 60;
+            pomoTotalSeconds = 5 * 60;
+          } else {
+            pomoMode = "focus";
+            pomoSecondsLeft = 25 * 60;
+            pomoTotalSeconds = 25 * 60;
+          }
+          tabs.forEach(t => t.classList.toggle("active", t.dataset.mode === pomoMode));
+          updateDisplay();
+        }
+      }, 1000);
+    }
+  };
+
+  // 重置
+  resetBtn.onclick = () => {
+    clearInterval(pomoTimer);
+    pomoRunning = false;
+    startBtn.textContent = "开始";
+    const tab = container.querySelector(".pomodoro-tab.active");
+    const minutes = tab ? parseInt(tab.dataset.minutes) : 25;
+    pomoSecondsLeft = minutes * 60;
+    pomoTotalSeconds = minutes * 60;
+    updateDisplay();
+  };
+
+  // 模式切换
+  tabs.forEach(tab => {
+    tab.onclick = () => {
+      if (pomoRunning) {
+        toast("请先暂停当前计时", "warn");
+        return;
+      }
+      tabs.forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      pomoMode = tab.dataset.mode;
+      const minutes = parseInt(tab.dataset.minutes);
+      pomoSecondsLeft = minutes * 60;
+      pomoTotalSeconds = minutes * 60;
+      updateDisplay();
+    };
+  });
+
+  // 初始化
+  updateDisplay();
+  updateStats();
 }
 
 /* ---------- 标记未保存 ---------- */

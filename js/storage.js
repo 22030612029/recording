@@ -222,6 +222,7 @@ export function deleteError(id) {
 
 /* ---------- 知识点 CRUD ---------- */
 export function addKnowledge(k) {
+  const now = Date.now();
   const item = {
     id: uid("k"),
     paperId: k.paperId || "",
@@ -231,7 +232,12 @@ export function addKnowledge(k) {
     mastery: clamp(num(k.mastery, 0), 0, 100),
     image: k.image || "", // 知识点配图（dataURL）
     tags: Array.isArray(k.tags) ? k.tags.filter(Boolean) : [],
-    createdAt: Date.now(),
+    // 艾宾浩斯复习
+    reviewStage: 0,       // 0=未开始, 1~5=第N轮
+    nextReview: now + 24 * 3600 * 1000, // 下次复习时间（默认1天后）
+    lastReview: 0,
+    reviewCount: 0,
+    createdAt: now,
   };
   _data.knowledge.push(item);
   save();
@@ -690,54 +696,96 @@ export function removeTag(name) {
 }
 
 /* ---------- 艾宾浩斯复习 ---------- */
-const REVIEW_INTERVALS = [1, 2, 4, 7, 15]; // 第1~5轮间隔（天）
+const REVIEW_INTERVALS = [1, 2, 4, 7, 15, 30]; // 第1~6轮间隔（天）
 const DAY = 24 * 3600 * 1000;
 
-/* 返回到期需要复习的错题（nextReview <= now，且未完成全部轮次） */
+/* 返回到期需要复习的错题和知识点（nextReview <= now，且未完成全部轮次） */
 export function getDueReviews() {
   const now = Date.now();
-  return _data.errors.filter((e) => {
-    if (e.reviewStage >= REVIEW_INTERVALS.length) return false; // 已完成全部轮次
-    return (e.nextReview || 0) <= now;
-  });
+  const errors = _data.errors
+    .filter((e) => (e.reviewStage || 0) < REVIEW_INTERVALS.length && (e.nextReview || 0) <= now)
+    .map((e) => ({ ...e, reviewType: "error" }));
+  const knowledge = _data.knowledge
+    .filter((k) => (k.reviewStage || 0) < REVIEW_INTERVALS.length && (k.nextReview || 0) <= now)
+    .map((k) => ({ ...k, reviewType: "knowledge" }));
+  return [...errors, ...knowledge].sort((a, b) => (a.nextReview || 0) - (b.nextReview || 0));
 }
 
-/* 标记某道错题已复习，推进到下一阶段 */
-export function markReviewed(id) {
-  const e = _data.errors.find((x) => x.id === id);
-  if (!e) return null;
-  const now = Date.now();
-  e.lastReview = now;
-  e.reviewCount = (e.reviewCount || 0) + 1;
-  if (e.reviewStage < REVIEW_INTERVALS.length) {
-    const interval = REVIEW_INTERVALS[e.reviewStage];
-    e.reviewStage += 1;
-    e.nextReview = now + interval * DAY;
+/* 标记某项已复习，推进到下一阶段（remembered=false 则回到第1轮） */
+export function markReviewed(id, remembered = true) {
+  // 先在错题中找，再在知识点中找
+  let item = _data.errors.find((x) => x.id === id);
+  let type = "error";
+  if (!item) {
+    item = _data.knowledge.find((x) => x.id === id);
+    type = "knowledge";
   }
+  if (!item) return null;
+
+  const now = Date.now();
+  item.lastReview = now;
+  item.reviewCount = (item.reviewCount || 0) + 1;
+
+  if (remembered) {
+    // 记住了，进入下一阶段
+    item.reviewStage = Math.min((item.reviewStage || 0) + 1, REVIEW_INTERVALS.length);
+  } else {
+    // 没记住，回到第1轮
+    item.reviewStage = 1;
+  }
+
+  // 计算下次复习时间
+  if (item.reviewStage < REVIEW_INTERVALS.length) {
+    const interval = REVIEW_INTERVALS[item.reviewStage];
+    item.nextReview = now + interval * DAY;
+  } else {
+    // 已完成全部轮次，设置为很远的未来
+    item.nextReview = now + 365 * DAY;
+  }
+
   save();
-  return e;
+  return { ...item, reviewType: type };
 }
 
 /* 跳过本次复习（推迟1天） */
 export function snoozeReview(id) {
-  const e = _data.errors.find((x) => x.id === id);
-  if (!e) return null;
-  e.nextReview = Date.now() + DAY;
+  let item = _data.errors.find((x) => x.id === id);
+  if (!item) item = _data.knowledge.find((x) => x.id === id);
+  if (!item) return null;
+  item.nextReview = Date.now() + DAY;
   save();
-  return e;
+  return item;
 }
 
-/* 复习统计：{ due, total, completed, todayReviewed } */
+/* 复习统计：{ due, total, completed, todayReviewed, dueErrors, dueKnowledge } */
 export function getReviewStats() {
   const now = Date.now();
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  let due = 0, completed = 0, todayReviewed = 0;
+  let due = 0, completed = 0, todayReviewed = 0, dueErrors = 0, dueKnowledge = 0;
+
   _data.errors.forEach((e) => {
-    if (e.reviewStage >= REVIEW_INTERVALS.length) { completed++; return; }
-    if ((e.nextReview || 0) <= now) due++;
+    if ((e.reviewStage || 0) >= REVIEW_INTERVALS.length) { completed++; return; }
+    if ((e.nextReview || 0) <= now) { due++; dueErrors++; }
     if ((e.lastReview || 0) >= todayStart.getTime()) todayReviewed++;
   });
-  return { due, total: _data.errors.length, completed, todayReviewed };
+
+  _data.knowledge.forEach((k) => {
+    if ((k.reviewStage || 0) >= REVIEW_INTERVALS.length) { completed++; return; }
+    if ((k.nextReview || 0) <= now) { due++; dueKnowledge++; }
+    if ((k.lastReview || 0) >= todayStart.getTime()) todayReviewed++;
+  });
+
+  return {
+    due,
+    total: _data.errors.length + _data.knowledge.length,
+    completed,
+    todayReviewed,
+    dueErrors,
+    dueKnowledge,
+    masteryRate: _data.errors.length + _data.knowledge.length > 0
+      ? Math.round((completed / (_data.errors.length + _data.knowledge.length)) * 100)
+      : 0,
+  };
 }
 
 /* ---------- 小窝日记 ---------- */
@@ -835,6 +883,78 @@ function formatDateISO(d) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/* ---------- 番茄钟 / 学习时长 ---------- */
+/* 添加一个番茄钟会话 */
+export function addPomodoroSession(duration, type = "focus") {
+  if (!Array.isArray(_data.pomodoros)) _data.pomodoros = [];
+  const now = Date.now();
+  const session = {
+    id: uid("pomo"),
+    duration, // 分钟
+    type, // focus / break
+    startTime: now - duration * 60 * 1000,
+    endTime: now,
+    date: formatDateISO(new Date()),
+    createdAt: now,
+  };
+  _data.pomodoros.push(session);
+  save();
+  return session;
+}
+
+/* 获取番茄钟统计 */
+export function getPomodoroStats() {
+  if (!Array.isArray(_data.pomodoros)) _data.pomodoros = [];
+  const focusSessions = _data.pomodoros.filter((p) => p.type === "focus");
+  const totalSessions = focusSessions.length;
+  const totalMinutes = focusSessions.reduce((s, p) => s + (p.duration || 0), 0);
+
+  // 今日学习时长
+  const today = formatDateISO(new Date());
+  const todaySessions = focusSessions.filter((p) => p.date === today);
+  const todayMinutes = todaySessions.reduce((s, p) => s + (p.duration || 0), 0);
+
+  // 最近7天学习时长
+  const last7Days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = formatDateISO(d);
+    const dayMinutes = focusSessions
+      .filter((p) => p.date === dateStr)
+      .reduce((s, p) => s + (p.duration || 0), 0);
+    last7Days.push({ date: dateStr, minutes: dayMinutes, sessions: focusSessions.filter((p) => p.date === dateStr).length });
+  }
+
+  // 连续学习天数
+  const dateSet = new Set(focusSessions.map((p) => p.date));
+  let streak = 0;
+  let cursor = new Date();
+  if (!dateSet.has(today)) cursor.setDate(cursor.getDate() - 1);
+  while (dateSet.has(formatDateISO(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return {
+    totalSessions,
+    totalMinutes,
+    totalHours: Math.round(totalMinutes / 60 * 10) / 10,
+    todaySessions: todaySessions.length,
+    todayMinutes,
+    todayHours: Math.round(todayMinutes / 60 * 10) / 10,
+    last7Days,
+    streak,
+    avgDailyMinutes: last7Days.length > 0 ? Math.round(last7Days.reduce((s, d) => s + d.minutes, 0) / 7) : 0,
+  };
+}
+
+/* 清空番茄钟数据 */
+export function clearPomodoros() {
+  _data.pomodoros = [];
+  save();
 }
 
 // 初始化加载

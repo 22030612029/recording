@@ -1,10 +1,25 @@
 /* ============================================================
- * charts.js — 数据可视化（ECharts）
+ * charts.js — 数据可视化（ECharts，按需动态加载）
  * 趋势折线 / 分数分布 / 掌握雷达 / 错题类型
  * ============================================================ */
 import * as store from "./storage.js";
 
 const CHARTS = new Map(); // id -> echarts instance
+
+/* ---------- ECharts 按需加载 ---------- */
+let echartsPromise = null;
+export function ensureEcharts() {
+  if (window.echarts) return Promise.resolve(true);
+  if (echartsPromise) return echartsPromise;
+  echartsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "../lib/echarts.min.js";
+    s.onload = () => resolve(true);
+    s.onerror = () => { echartsPromise = null; reject(new Error("ECharts 加载失败")); };
+    document.head.appendChild(s);
+  });
+  return echartsPromise;
+}
 
 const PALETTE = {
   ink: "#1b2a4e",
@@ -420,7 +435,8 @@ function renderTargetGap(domId) {
 }
 
 /* ---------- 分析视图整体 ---------- */
-export function renderCharts(container) {
+export async function renderCharts(container) {
+  await ensureEcharts();
   disposeStale();
   const data = store.getData();
   const hasPapers = data.papers.length > 0;
@@ -430,7 +446,7 @@ export function renderCharts(container) {
   const hasTarget = !!gap.target;
   const showGap = hasTarget && gap.rows.length;
 
-  container.innerHTML = `
+    container.innerHTML = `
     <div class="section-head">
       <div>
         <h2>学情分析</h2>
@@ -587,7 +603,8 @@ function adviceFor(r) {
 }
 
 /* ---------- 仪表盘迷你趋势 ---------- */
-export function renderMiniTrend(container) {
+export async function renderMiniTrend(container) {
+  await ensureEcharts();
   const data = store.getData();
   const papers = [...data.papers].filter((p) => p.date).sort((a, b) => a.date.localeCompare(b.date));
   const inst = getChart("chart-mini");

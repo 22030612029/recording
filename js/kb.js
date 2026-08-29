@@ -41,10 +41,10 @@ function ensureKatex() {
   katexPromise = new Promise((resolve, reject) => {
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "./vendor/katex/katex.min.css";
+    link.href = "../vendor/katex/katex.min.css";
     document.head.appendChild(link);
     const s = document.createElement("script");
-    s.src = "./vendor/katex/katex.min.js";
+    s.src = "../vendor/katex/katex.min.js";
     s.onload = () => resolve(true);
     s.onerror = () => { katexPromise = null; reject(new Error("KaTeX 加载失败")); };
     document.head.appendChild(s);
@@ -78,6 +78,92 @@ function renderMath(text) {
   return text;
 }
 
+/* ---------- HTML 消毒（XSS 防护） ---------- */
+const ALLOWED_TAGS = new Set([
+  "h1","h2","h3","h4","h5","h6","p","br","hr",
+  "strong","em","del","u","sub","sup","mark",
+  "ul","ol","li","blockquote","pre","code",
+  "table","thead","tbody","tr","th","td",
+  "a","img","span","div",
+]);
+const ALLOWED_ATTRS = {
+  "a": ["href","title","target","rel"],
+  "img": ["src","alt","title","class"],
+  "span": ["class"],
+  "div": ["class"],
+  "code": ["class"],
+  "pre": ["class"],
+};
+const SAFE_PROTOCOLS = ["http://","https://","data:image/","mailto:","#"];
+
+function sanitizeUrl(url) {
+  if (!url) return "";
+  const lower = url.toLowerCase().trim();
+  // 禁止 javascript:、vbscript:、data:text/html 等危险协议
+  if (lower.startsWith("javascript:") || lower.startsWith("vbscript:") ||
+      lower.startsWith("data:text/html") || lower.startsWith("data:text/javascript")) {
+    return "";
+  }
+  // 相对路径或安全协议允许
+  if (lower.startsWith("/") || lower.startsWith("#") || SAFE_PROTOCOLS.some(p => lower.startsWith(p))) {
+    return url;
+  }
+  return "";
+}
+
+function sanitizeHtml(html) {
+  if (!html) return "";
+  // 使用 DOMParser 解析，然后过滤危险标签和属性
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${html}</div>`, "text/html");
+    const container = doc.body.firstChild;
+
+    function cleanNode(node) {
+      const children = Array.from(node.childNodes);
+      children.forEach(child => {
+        if (child.nodeType === 1) { // 元素节点
+          const tag = child.tagName.toLowerCase();
+          if (!ALLOWED_TAGS.has(tag)) {
+            // 移除危险标签，但保留其文本内容
+            const text = doc.createTextNode(child.textContent);
+            node.replaceChild(text, child);
+            return;
+          }
+          // 过滤属性
+          const attrs = Array.from(child.attributes);
+          attrs.forEach(attr => {
+            const name = attr.name.toLowerCase();
+            const allowed = ALLOWED_ATTRS[tag] || [];
+            if (!allowed.includes(name) || name.startsWith("on")) {
+              child.removeAttribute(attr.name);
+            } else if (name === "href" || name === "src") {
+              const safe = sanitizeUrl(attr.value);
+              if (!safe) child.removeAttribute(attr.name);
+              else child.setAttribute(name, safe);
+            }
+          });
+          // 强制 a 标签添加 rel="noopener"
+          if (tag === "a") {
+            child.setAttribute("rel", "noopener noreferrer");
+            child.setAttribute("target", "_blank");
+          }
+          // 递归处理子节点
+          cleanNode(child);
+        } else if (child.nodeType === 8) { // 注释节点
+          node.removeChild(child);
+        }
+      });
+    }
+
+    cleanNode(container);
+    return container.innerHTML;
+  } catch (e) {
+    // 解析失败，返回转义后的纯文本
+    return escapeHtml(html);
+  }
+}
+
 /* ---------- Markdown → HTML ---------- */
 function mdToHtml(md) {
   if (!md) return "";
@@ -86,11 +172,18 @@ function mdToHtml(md) {
   html = html.replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${code}</code></pre>`);
   // 行内代码
   html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-  // 图片 → 卡片
-  html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, src) =>
-    `<span class="md-image-card"><img src="${src}" alt="${alt}" /><span class="md-image-caption">${escapeHtml(alt)}</span></span>`);
-  // 链接
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // 图片 → 卡片（src 消毒）
+  html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, src) => {
+    const safeSrc = sanitizeUrl(src);
+    if (!safeSrc) return escapeHtml(`![${alt}](${src})`);
+    return `<span class="md-image-card"><img src="${safeSrc}" alt="${escapeHtml(alt)}" loading="lazy" /><span class="md-image-caption">${escapeHtml(alt)}</span></span>`;
+  });
+  // 链接（href 消毒）
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, href) => {
+    const safeHref = sanitizeUrl(href);
+    if (!safeHref) return escapeHtml(`[${text}](${href})`);
+    return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+  });
   // 标题
   html = html.replace(/^###### (.+)$/gm, "<h6>$1</h6>");
   html = html.replace(/^##### (.+)$/gm, "<h5>$1</h5>");
@@ -110,7 +203,7 @@ function mdToHtml(md) {
   // 有序列表
   html = html.replace(/^\d+\. (.+)$/gm, "<li>$1</li>");
   html = html.replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ol>${m}</ol>`);
-  // 表格（简单）
+  // 表格（简单）- 内容已转义
   html = html.replace(/^\|(.+)\|\n\|[-:| ]+\|\n((?:\|.+\|\n?)+)/gm, (_, header, body) => {
     const ths = header.split("|").filter(Boolean).map(h => `<th>${h.trim()}</th>`).join("");
     const trs = body.trim().split("\n").map(row => {
@@ -127,7 +220,8 @@ function mdToHtml(md) {
   html = html.replace(/<p>\s*<\/p>/g, "");
   // 公式
   html = renderMath(html);
-  return html;
+  // 最终消毒
+  return sanitizeHtml(html);
 }
 
 /* ---------- 工具函数 ---------- */
