@@ -33,7 +33,6 @@ const QUOTES = [
 const MILESTONES = [3, 7, 14, 30, 60, 100, 200, 365];
 
 /* ---------- 模块状态 ---------- */
-let saveTimer = null;
 let todayDiary = null;
 
 /* ---------- 主渲染 ---------- */
