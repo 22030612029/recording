@@ -585,15 +585,11 @@ function renderSettings(container) {
     </div>
 
     <div class="card" style="margin-top:16px">
-      <div class="card-title">配色方案 <span class="count">点击切换</span></div>
+      <div class="card-title">主题风格 <span class="count">点击切换</span></div>
       <div class="theme-grid" id="themeGrid">
         ${features.THEMES.map(t => `
           <div class="theme-card ${features.getTheme() === t.id ? 'active' : ''}" data-theme="${t.id}" title="${t.desc}">
-            <div class="theme-preview" data-theme-preview="${t.id}">
-              <span class="theme-dot" style="background:var(--accent)"></span>
-              <span class="theme-dot" style="background:var(--bg)"></span>
-              <span class="theme-dot" style="background:var(--ink)"></span>
-            </div>
+            <div class="theme-preview theme-preview-${t.id}"></div>
             <div class="theme-name">${t.name}</div>
           </div>
         `).join("")}
