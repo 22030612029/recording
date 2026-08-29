@@ -189,6 +189,67 @@ img { max-width: 100%; display: block; }
 }
 .topbar-actions { display: flex; gap: 8px; }
 
+/* 考研倒计时 */
+.countdown-widget {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 16px;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  min-width: 140px;
+}
+.countdown-main {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.countdown-label {
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+.countdown-days {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.countdown-unit {
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+.countdown-quote {
+  font-size: 11px;
+  color: var(--ink-mute);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* 暗色模式倒计时 */
+:root[data-theme="dark"] .countdown-widget, .dark .countdown-widget {
+  border-left-color: var(--line);
+  border-right-color: var(--line);
+}
+:root[data-theme="dark"] .countdown-days, .dark .countdown-days {
+  color: var(--accent);
+}
+
+/* 移动端隐藏励志文案 */
+@media (max-width: 768px) {
+  .countdown-widget {
+    min-width: auto;
+    padding: 4px 10px;
+  }
+  .countdown-quote {
+    display: none;
+  }
+}
+
 .content { flex: 1; padding: var(--pad); max-width: var(--content-max); width: 100%; margin: 0 auto; }
 
 .footer {
