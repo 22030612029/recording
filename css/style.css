@@ -1623,7 +1623,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 }
 
 /* 侧边栏切换按钮 */
-.diary-sidebar-toggle {
+.diary-sidebar-toggle, .global-sidebar-toggle {
   position: fixed;
   top: 16px; left: 16px;
   z-index: 100;
@@ -1638,7 +1638,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   transition: all .2s ease;
 }
-.diary-sidebar-toggle:hover {
+.diary-sidebar-toggle:hover, .global-sidebar-toggle:hover {
   background: var(--surface-2);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.12);

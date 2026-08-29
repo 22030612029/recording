@@ -46,8 +46,6 @@ export function renderDiary(container) {
 
   container.innerHTML = `
     <div class="diary-wrap">
-      <!-- 侧边栏切换按钮 -->
-      <button class="diary-sidebar-toggle" id="diarySidebarToggle" type="button" title="隐藏导航栏">✕</button>
       <!-- 顶部暖心区 -->
       <div class="diary-hero">
         <div class="diary-hero-bg"></div>
@@ -166,19 +164,6 @@ function bindEvents(container) {
   const saveState = container.querySelector("#diarySaveState");
   const charCount = container.querySelector("#diaryCharCount");
   const moodPicker = container.querySelector("#diaryMoodPicker");
-
-  // 侧边栏切换
-  const sidebarToggle = container.querySelector("#diarySidebarToggle");
-  if (sidebarToggle) {
-    sidebarToggle.onclick = () => {
-      const sidebar = document.querySelector(".sidebar");
-      const appShell = document.querySelector(".app-shell");
-      const isHidden = sidebar?.classList.toggle("diary-sidebar-hidden");
-      appShell?.classList.toggle("diary-shell-full", isHidden);
-      sidebarToggle.textContent = isHidden ? "☰" : "✕";
-      sidebarToggle.title = isHidden ? "显示导航栏" : "隐藏导航栏";
-    };
-  }
 
   // 心情选择（标记未保存）
   moodPicker.querySelectorAll(".diary-mood-btn").forEach((btn) => {

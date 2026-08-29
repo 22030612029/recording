@@ -103,14 +103,6 @@ export function switchView(name) {
   const qb = document.getElementById("quickAddBtn");
   qb.style.display = name === "dashboard" ? "" : "none";
 
-  // 离开小窝页面时恢复侧边栏
-  if (name !== "diary") {
-    const sidebar = document.querySelector(".sidebar");
-    const appShell = document.querySelector(".app-shell");
-    sidebar?.classList.remove("diary-sidebar-hidden");
-    appShell?.classList.remove("diary-shell-full");
-  }
-
   const container = document.getElementById("view-" + name);
   container.scrollTop = 0;
   VIEWS[name].render(container);
@@ -817,6 +809,26 @@ export function openGlobalSearch() {
 function init() {
   // 主题初始化（暗色模式）
   features.initTheme();
+
+  // 全局侧边栏切换（默认隐藏）
+  const sidebar = document.getElementById("sidebar");
+  const appShell = document.getElementById("appShell");
+  const globalToggle = document.getElementById("globalSidebarToggle");
+  function setSidebarHidden(hidden) {
+    sidebar?.classList.toggle("diary-sidebar-hidden", hidden);
+    appShell?.classList.toggle("diary-shell-full", hidden);
+    if (globalToggle) {
+      globalToggle.textContent = hidden ? "☰" : "✕";
+      globalToggle.title = hidden ? "显示导航栏" : "隐藏导航栏";
+    }
+  }
+  setSidebarHidden(true); // 默认隐藏
+  if (globalToggle) {
+    globalToggle.onclick = () => {
+      const isHidden = sidebar?.classList.contains("diary-sidebar-hidden");
+      setSidebarHidden(!isHidden);
+    };
+  }
 
   // 导航绑定
   document.querySelectorAll(".nav-item, .tab-item").forEach((b) => {
