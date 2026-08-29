@@ -1193,16 +1193,23 @@ function init() {
 
 /* ---------- 背景音乐 ---------- */
 function initBackgroundMusic() {
-  const music = document.getElementById("bgMusic");
   const btn = document.getElementById("musicBtn");
   const icon = document.getElementById("musicIcon");
-  if (!music || !btn) return;
+  if (!btn) return;
 
-  // 音量设置
+  // 创建音频元素
+  const music = new Audio();
+  music.loop = true;
   music.volume = 0.4;
+  music.preload = "auto";
+  music.src = "music/yilushenghua.mp3";
+
+  let isPlaying = false;
+  let hasInteracted = false;
 
   // 更新按钮状态
   const updateBtn = (playing) => {
+    isPlaying = playing;
     if (playing) {
       btn.classList.add("playing");
       btn.classList.remove("paused");
@@ -1214,48 +1221,56 @@ function initBackgroundMusic() {
     }
   };
 
-  // 尝试自动播放
-  const tryAutoPlay = async () => {
-    try {
-      await music.play();
+  // 播放音频
+  const playMusic = () => {
+    music.play().then(() => {
       updateBtn(true);
       localStorage.setItem("recording_music_playing", "1");
-    } catch (e) {
-      // 浏览器阻止自动播放，等待用户交互
+    }).catch((e) => {
+      console.warn("音乐播放失败:", e.message);
       updateBtn(false);
-      // 首次用户交互时尝试播放
-      const playOnFirstInteract = () => {
-        music.play().then(() => {
-          updateBtn(true);
-          localStorage.setItem("recording_music_playing", "1");
-        }).catch(() => {});
-        document.removeEventListener("click", playOnFirstInteract);
-        document.removeEventListener("keydown", playOnFirstInteract);
-        document.removeEventListener("touchstart", playOnFirstInteract);
-      };
-      document.addEventListener("click", playOnFirstInteract, { once: true });
-      document.addEventListener("keydown", playOnFirstInteract, { once: true });
-      document.addEventListener("touchstart", playOnFirstInteract, { once: true });
-    }
+    });
   };
 
-  // 检查用户上次的播放状态
-  const wasPlaying = localStorage.getItem("recording_music_playing") === "1";
-  if (wasPlaying) {
-    tryAutoPlay();
-  } else {
-    updateBtn(false);
-  }
+  // 音频加载成功
+  music.addEventListener("canplay", () => {
+    console.log("背景音乐加载成功，时长:", music.duration, "秒");
+    // 如果用户之前选择了播放，尝试播放
+    const wasPlaying = localStorage.getItem("recording_music_playing") === "1";
+    if (wasPlaying && hasInteracted) {
+      playMusic();
+    }
+  });
+
+  // 音频加载错误
+  music.addEventListener("error", (e) => {
+    console.warn("背景音乐加载失败:", e);
+    btn.style.display = "none";
+  });
+
+  // 首次用户交互时尝试播放
+  const playOnFirstInteract = () => {
+    if (hasInteracted) return;
+    hasInteracted = true;
+    const wasPlaying = localStorage.getItem("recording_music_playing") === "1";
+    if (wasPlaying) {
+      playMusic();
+    }
+    // 移除事件监听
+    document.removeEventListener("click", playOnFirstInteract);
+    document.removeEventListener("keydown", playOnFirstInteract);
+    document.removeEventListener("touchstart", playOnFirstInteract);
+  };
+
+  document.addEventListener("click", playOnFirstInteract);
+  document.addEventListener("keydown", playOnFirstInteract);
+  document.addEventListener("touchstart", playOnFirstInteract);
 
   // 播放/暂停按钮
   btn.onclick = () => {
+    hasInteracted = true;
     if (music.paused) {
-      music.play().then(() => {
-        updateBtn(true);
-        localStorage.setItem("recording_music_playing", "1");
-      }).catch((e) => {
-        toast("播放失败，请检查音频文件", "err");
-      });
+      playMusic();
     } else {
       music.pause();
       updateBtn(false);
@@ -1263,11 +1278,8 @@ function initBackgroundMusic() {
     }
   };
 
-  // 音频加载错误处理
-  music.onerror = () => {
-    btn.style.display = "none";
-    console.warn("背景音乐加载失败，请确保 music/yilushenghua.mp3 文件存在");
-  };
+  // 初始化按钮状态
+  updateBtn(false);
 }
 
 if (document.readyState === "loading") {
