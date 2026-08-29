@@ -1186,6 +1186,88 @@ function init() {
 
   // 认证启动：已登录 → 进入应用；未登录 → 显示登录界面
   setupAuth();
+
+  // 背景音乐初始化
+  initBackgroundMusic();
+}
+
+/* ---------- 背景音乐 ---------- */
+function initBackgroundMusic() {
+  const music = document.getElementById("bgMusic");
+  const btn = document.getElementById("musicBtn");
+  const icon = document.getElementById("musicIcon");
+  if (!music || !btn) return;
+
+  // 音量设置
+  music.volume = 0.4;
+
+  // 更新按钮状态
+  const updateBtn = (playing) => {
+    if (playing) {
+      btn.classList.add("playing");
+      btn.classList.remove("paused");
+      icon.textContent = "♪";
+    } else {
+      btn.classList.remove("playing");
+      btn.classList.add("paused");
+      icon.textContent = "♫";
+    }
+  };
+
+  // 尝试自动播放
+  const tryAutoPlay = async () => {
+    try {
+      await music.play();
+      updateBtn(true);
+      localStorage.setItem("recording_music_playing", "1");
+    } catch (e) {
+      // 浏览器阻止自动播放，等待用户交互
+      updateBtn(false);
+      // 首次用户交互时尝试播放
+      const playOnFirstInteract = () => {
+        music.play().then(() => {
+          updateBtn(true);
+          localStorage.setItem("recording_music_playing", "1");
+        }).catch(() => {});
+        document.removeEventListener("click", playOnFirstInteract);
+        document.removeEventListener("keydown", playOnFirstInteract);
+        document.removeEventListener("touchstart", playOnFirstInteract);
+      };
+      document.addEventListener("click", playOnFirstInteract, { once: true });
+      document.addEventListener("keydown", playOnFirstInteract, { once: true });
+      document.addEventListener("touchstart", playOnFirstInteract, { once: true });
+    }
+  };
+
+  // 检查用户上次的播放状态
+  const wasPlaying = localStorage.getItem("recording_music_playing") === "1";
+  if (wasPlaying) {
+    tryAutoPlay();
+  } else {
+    updateBtn(false);
+  }
+
+  // 播放/暂停按钮
+  btn.onclick = () => {
+    if (music.paused) {
+      music.play().then(() => {
+        updateBtn(true);
+        localStorage.setItem("recording_music_playing", "1");
+      }).catch((e) => {
+        toast("播放失败，请检查音频文件", "err");
+      });
+    } else {
+      music.pause();
+      updateBtn(false);
+      localStorage.setItem("recording_music_playing", "0");
+    }
+  };
+
+  // 音频加载错误处理
+  music.onerror = () => {
+    btn.style.display = "none";
+    console.warn("背景音乐加载失败，请确保 music/yilushenghua.mp3 文件存在");
+  };
 }
 
 if (document.readyState === "loading") {
