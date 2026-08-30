@@ -93,6 +93,7 @@ const ALLOWED_ATTRS = {
   "div": ["class"],
   "code": ["class"],
   "pre": ["class"],
+  "blockquote": ["class"],
 };
 const SAFE_PROTOCOLS = ["http://","https://","data:image/","mailto:","#"];
 
@@ -191,8 +192,14 @@ function mdToHtml(md) {
   html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
   html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
   html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
-  // 引用
-  html = html.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>");
+  // 多行引用块（连续的 > 行，包括空行 >）
+  html = html.replace(/(?:^&gt;[^\n]*\n?)+/gm, (match) => {
+    const lines = match.replace(/\n$/, "").split("\n").map(line => line.replace(/^&gt;\s?/, ""));
+    const content = lines.join("<br>");
+    const isSummary = content.includes("📝") && content.includes("总结");
+    const cls = isSummary ? ' class="md-summary"' : "";
+    return `<blockquote${cls}>${content}</blockquote>\n`;
+  });
   // 粗体、斜体、删除线
   html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
@@ -378,6 +385,7 @@ function renderEditor(note) {
         <button data-md="code" title="代码">&lt;/&gt;</button>
         <button data-md="link" title="链接">🔗</button>
         <button data-md="image" title="插入图片">🖼</button>
+        <button data-md="summary" title="插入总结（Ctrl+J）">📝</button>
         <button data-md="math" title="块级公式">Σ</button>
         <button data-md="mathi" title="行内公式">$x$</button>
         <span class="kb-mode">
@@ -578,6 +586,12 @@ function bindEditorEvents(editor, container) {
       wrapSelection("[", "](链接)");
       return;
     }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === "j") {
+      ev.preventDefault();
+      insertSummary(ta);
+      refreshPreview();
+      return;
+    }
     if (ev.key === "Tab") {
       ev.preventDefault();
       const s = ta.selectionStart, e = ta.selectionEnd;
@@ -604,16 +618,16 @@ function bindEditorEvents(editor, container) {
     toast("图片处理中…", "ok");
     const dataUrl = await fileToCompressedDataUrl(imageFile, 1800, 0.88);
     if (!dataUrl) { toast("图片处理失败", "err"); return; }
-    // 在光标位置插入图片 markdown + 总结提示
+    // 在光标位置插入图片
     const s = ta.selectionStart, e2 = ta.selectionEnd;
-    const imgBlock = `\n![图片](${dataUrl})\n\n**📝 总结：**\n\n`;
+    const imgBlock = `\n![图片](${dataUrl})\n\n`;
     ta.value = ta.value.slice(0, s) + imgBlock + ta.value.slice(e2);
-    // 将光标定位到总结后面，方便直接输入
+    // 将光标定位到图片后面，方便继续输入或添加总结
     ta.selectionStart = ta.selectionEnd = s + imgBlock.length;
     refreshPreview();
     markDirty();
     saveContent();
-    toast("已插入图片，可在下方写总结", "ok");
+    toast("已插入图片，需要总结时点工具栏 📝 或按 Ctrl+J", "ok");
   });
 
   // 标题自动保存
@@ -673,6 +687,7 @@ function bindEditorEvents(editor, container) {
     code: () => wrapSelection(ta, "`", "`", "code"),
     link: () => wrapSelection(ta, "[", "](https://)", "链接文字"),
     image: () => insertImage(ta, refreshPreview, markDirty, saveContent),
+    summary: () => insertSummary(ta),
     math: () => wrapSelection(ta, "\n$$\n", "\n$$\n", "\\frac{a}{b}"),
     mathi: () => wrapSelection(ta, "$", "$", "x^2"),
   };
@@ -712,6 +727,20 @@ function insertAtCursor(ta, text) {
   ta.selectionStart = ta.selectionEnd = s + text.length;
 }
 
+/* 插入总结块（引用样式，光标定位到内容区） */
+function insertSummary(ta) {
+  const s = ta.selectionStart, e2 = ta.selectionEnd;
+  const sel = ta.value.slice(s, e2);
+  // 确保前面有空行
+  const needPrefix = s > 0 && ta.value[s - 1] !== "\n";
+  const summaryBlock = `${needPrefix ? "\n" : ""}> 📝 **总结：**\n> \n> ${sel || ""}\n\n`;
+  ta.value = ta.value.slice(0, s) + summaryBlock + ta.value.slice(e2);
+  // 光标定位到总结内容行（"> " 后面）
+  const contentStart = s + (needPrefix ? 1 : 0) + "> 📝 **总结：**\n> \n> ".length;
+  ta.selectionStart = ta.selectionEnd = contentStart + (sel ? sel.length : 0);
+  ta.dispatchEvent(new Event("input"));
+}
+
 /* 插入图片（文件选择） */
 function insertImage(ta, refreshPreview, markDirty, saveContent) {
   const input = document.createElement("input");
@@ -723,13 +752,13 @@ function insertImage(ta, refreshPreview, markDirty, saveContent) {
     toast("图片处理中…", "ok");
     const dataUrl = await fileToCompressedDataUrl(file, 1800, 0.88);
     if (!dataUrl) { toast("图片处理失败", "err"); return; }
-    // 插入图片 + 总结提示
+    // 插入图片
     const s = ta.selectionStart, e2 = ta.selectionEnd;
-    const imgBlock = `\n![图片](${dataUrl})\n\n**📝 总结：**\n\n`;
+    const imgBlock = `\n![图片](${dataUrl})\n\n`;
     ta.value = ta.value.slice(0, s) + imgBlock + ta.value.slice(e2);
     ta.selectionStart = ta.selectionEnd = s + imgBlock.length;
     refreshPreview(); markDirty(); saveContent();
-    toast("已插入图片，可在下方写总结", "ok");
+    toast("已插入图片，需要总结时点 📝 或按 Ctrl+J", "ok");
   };
   input.click();
 }

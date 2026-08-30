@@ -1490,6 +1490,17 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
   color: var(--ink-2);
 }
 .kb-preview blockquote p { margin: 0.4em 0; }
+.kb-preview blockquote.md-summary {
+  background: linear-gradient(135deg, rgba(184,134,11,0.1), rgba(30,122,92,0.08));
+  border-left: 4px solid var(--ok);
+  border-radius: 0 12px 12px 0;
+  padding: 16px 20px;
+  box-shadow: 0 2px 12px rgba(27,42,78,0.06);
+}
+.kb-preview blockquote.md-summary strong {
+  color: var(--ok);
+  font-size: 1.05em;
+}
 
 .kb-preview code {
   background: var(--surface-2);
