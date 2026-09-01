@@ -613,7 +613,7 @@ function renderSettings(container) {
       </div>
       <div class="card">
         <div class="card-title">存储状态</div>
-        <div class="stat-sub" style="margin-bottom:6px">本地占用约 <span class="score-num">${usage}</span>（约 ${storeStat.pct}% / 5MB）</div>
+        <div class="stat-sub" style="margin-bottom:6px">本地占用约 <span class="score-num" id="storageUsageText">${usage}</span>（约 <span id="storagePctText">${storeStat.pct}</span>% / <span id="storageQuotaText">5GB</span>）</div>
         <div class="stat-sub">试卷 ${data.papers.length} · 错题 ${data.errors.length} · 知识点 ${data.knowledge.length} · 目标院校 ${targets.length}</div>
         ${lastBackup ? `<div class="stat-sub" style="margin-top:6px">上次备份：${new Date(lastBackup).toLocaleString("zh-CN")}（${daysSinceBackup}天前）</div>` : `<div class="stat-sub" style="margin-top:6px;color:var(--danger);font-weight:600">⚠ 尚未备份过数据，建议立即导出备份</div>`}
         ${storeStat.pct > 85
@@ -663,7 +663,7 @@ function renderSettings(container) {
     <div class="card" style="margin-top:16px;border-top:3px solid var(--ink)">
       <div class="card-title">关于砚台</div>
       <p style="font-size:13.5px;color:var(--ink-2);line-height:1.7">面向 2027 考研备考的本地学习管理台：目标院校与差距分析、刷题记录、错题与知识点、可视化与学情报告。纯静态、无后端，数据不离本机。</p>
-      <p class="muted" style="font-size:12px;margin-top:6px">HTML5 · CSS3 · 原生 JS · ECharts · localStorage</p>
+      <p class="muted" style="font-size:12px;margin-top:6px">HTML5 · CSS3 · 原生 JS · ECharts · IndexedDB（GB级本地存储）</p>
     </div>
   `;
 
@@ -739,6 +739,22 @@ function renderSettings(container) {
   // 修改密码
   const accChangePw = container.querySelector("#accountChangePw");
   if (accChangePw) accChangePw.onclick = openChangePassword;
+
+  // 异步获取真实存储配额并更新显示（IndexedDB 配额由浏览器管理，通常很大）
+  if (store.getStorageInfo) {
+    store.getStorageInfo().then((info) => {
+      const quotaText = container.querySelector("#storageQuotaText");
+      const pctText = container.querySelector("#storagePctText");
+      const usageText = container.querySelector("#storageUsageText");
+      if (info.quota > 0) {
+        if (quotaText) quotaText.textContent = info.quotaGB > 0 ? info.quotaGB + "GB" : Math.round(info.quota / 1024 / 1024) + "MB";
+        if (pctText) pctText.textContent = info.percent;
+      }
+      if (info.usage > 0 && usageText) {
+        usageText.textContent = info.usageMB > 0 ? info.usageMB + " MB" : Math.round(info.usage / 1024) + " KB";
+      }
+    }).catch(() => {});
+  }
 }
 
 /* 修改密码模态 */
@@ -887,11 +903,12 @@ export function openTargetForm(target = null) {
 
 function estimateUsage() {
   try {
-    const key = store.dataKey();
-    const raw = key ? localStorage.getItem(key) || "" : "";
-    const bytes = new Blob([raw]).size;
+    const data = store.getData();
+    const bytes = new Blob([JSON.stringify(data)]).size;
     if (bytes < 1024) return bytes + " B";
-    return (bytes / 1024).toFixed(1) + " KB";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(2) + " MB";
+    return (bytes / 1024 / 1024 / 1024).toFixed(3) + " GB";
   } catch (e) { return "—"; }
 }
 
@@ -1113,7 +1130,10 @@ export function openGlobalSearch() {
 }
 
 /* ---------- 初始化 ---------- */
-function init() {
+async function init() {
+  // 先从 IndexedDB 加载数据（异步）
+  await store.load();
+
   // 主题初始化（暗色模式）
   features.initTheme();
 

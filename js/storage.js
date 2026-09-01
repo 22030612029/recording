@@ -1,10 +1,72 @@
 /* ============================================================
- * storage.js — 数据层（localStorage 单一数据源，按登录用户隔离）
+ * storage.js — 数据层（IndexedDB 持久化 + 内存缓存，按登录用户隔离）
  * 提供 schema、CRUD、导入/导出、示例数据、分数区间、事件订阅
+ * IndexedDB 提供 GB 级存储空间，远超 localStorage 的 5MB 限制
  * ============================================================ */
 import { getSessionUserId, userKey } from "./auth.js";
 
 const LEGACY_KEY = "kaoyan_study_data";
+const DB_NAME = "kaoyan_study_db";
+const DB_VERSION = 1;
+const STORE_NAME = "user_data";
+
+/* ---------- IndexedDB 辅助 ---------- */
+let _dbPromise = null;
+
+function openDB() {
+  if (_dbPromise) return _dbPromise;
+  _dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: "userId" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return _dbPromise;
+}
+
+async function idbGet(userId) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const req = tx.objectStore(STORE_NAME).get(userId);
+    req.onsuccess = () => resolve(req.result?.data || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPut(userId, data) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).put({ userId, data, updatedAt: Date.now() });
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/* 获取存储使用信息（使用量 + 配额） */
+export async function getStorageInfo() {
+  try {
+    if (navigator.storage && navigator.storage.estimate) {
+      const est = await navigator.storage.estimate();
+      return {
+        usage: est.usage || 0,
+        quota: est.quota || 0,
+        usageMB: Math.round((est.usage || 0) / 1024 / 1024 * 10) / 10,
+        quotaGB: Math.round((est.quota || 0) / 1024 / 1024 / 1024 * 100) / 100,
+        percent: est.quota ? Math.round((est.usage / est.quota) * 1000) / 10 : 0,
+      };
+    }
+  } catch (e) {
+    console.warn("获取存储信息失败", e);
+  }
+  return { usage: 0, quota: 0, usageMB: 0, quotaGB: 0, percent: 0 };
+}
 
 /* 当前登录用户的数据 key（未登录返回 null，仅读默认数据不落库） */
 export function dataKey() {
@@ -46,14 +108,40 @@ let _data = null;
 const _listeners = new Set();
 
 /* ---------- 读取/保存 ---------- */
-export function load() {
+export async function load() {
   const key = dataKey();
   try {
-    const raw = key ? localStorage.getItem(key) : null;
+    let raw = null;
+    let migrated = false;
+
+    // 优先从 IndexedDB 加载
+    if (key) {
+      raw = await idbGet(key);
+    }
+
+    // IndexedDB 没有数据，尝试从 localStorage 迁移
+    if (!raw && key) {
+      const legacyRaw = localStorage.getItem(key);
+      if (legacyRaw) {
+        raw = JSON.parse(legacyRaw);
+        migrated = true;
+        console.log("[storage] 检测到 localStorage 旧数据，正在迁移到 IndexedDB...");
+      }
+    }
+
+    // 兼容旧的全局 key（未登录用户的数据）
+    if (!raw) {
+      const globalRaw = localStorage.getItem(LEGACY_KEY);
+      if (globalRaw) {
+        raw = JSON.parse(globalRaw);
+        migrated = true;
+      }
+    }
+
     if (!raw) {
       _data = defaultData();
     } else {
-      const parsed = JSON.parse(raw);
+      const parsed = raw;
       const base = defaultData();
       _data = Object.assign(base, parsed);
       if (!Array.isArray(_data.papers)) _data.papers = [];
@@ -65,29 +153,36 @@ export function load() {
       if (!_data.activeTargetId && _data.targets.length) _data.activeTargetId = _data.targets[0].id;
 
       // —— 2026-08-22 迁移：科目键「专业课」统一改名为「408」 ——
-      let migrated = false;
+      let subjectMigrated = false;
       const renameSubject = (obj) => {
         if (!obj || typeof obj !== "object") return;
         if (Array.isArray(obj)) { obj.forEach(renameSubject); return; }
         if ("专业课" in obj && !("408" in obj)) {
           obj["408"] = obj["专业课"];
           delete obj["专业课"];
-          migrated = true;
+          subjectMigrated = true;
         }
         Object.values(obj).forEach(renameSubject);
       };
       const renameArrayField = (arr, field) => {
         arr.forEach((it) => {
-          if (it?.[field] === "专业课") { it[field] = "408"; migrated = true; }
+          if (it?.[field] === "专业课") { it[field] = "408"; subjectMigrated = true; }
         });
       };
-      _data.subjects = _data.subjects.map((s) => { if (s === "专业课") { migrated = true; return "408"; } return s; });
+      _data.subjects = _data.subjects.map((s) => { if (s === "专业课") { subjectMigrated = true; return "408"; } return s; });
       if (!_data.subjects.includes("408")) _data.subjects.push("408");
       renameArrayField(_data.papers, "subject");
       renameArrayField(_data.errors, "subject");
       renameArrayField(_data.knowledge, "subject");
       renameSubject(_data.targets);
-      if (migrated) save();
+
+      // 迁移到 IndexedDB
+      if (migrated || subjectMigrated) {
+        await save();
+        if (migrated) {
+          console.log("[storage] 数据已迁移到 IndexedDB，localStorage 旧数据保留作为备份");
+        }
+      }
     }
   } catch (e) {
     console.warn("数据读取失败，重置为默认。", e);
@@ -96,15 +191,26 @@ export function load() {
   return _data;
 }
 
-export function save() {
+export async function save() {
   const key = dataKey();
   if (!key) return false; // 未登录不写库
   try {
-    localStorage.setItem(key, JSON.stringify(_data));
+    await idbPut(key, _data);
     emit();
     return true;
   } catch (e) {
-    console.error("保存失败", e);
+    console.error("保存到 IndexedDB 失败", e);
+    // 降级：尝试保存到 localStorage（如果数据量不大）
+    try {
+      const json = JSON.stringify(_data);
+      if (json.length < 4 * 1024 * 1024) { // 小于4MB才尝试localStorage
+        localStorage.setItem(key, json);
+        emit();
+        return true;
+      }
+    } catch (e2) {
+      console.error("降级保存到 localStorage 也失败", e2);
+    }
     return false;
   }
 }
@@ -429,10 +535,12 @@ export function getLastBackupTime() {
 /* 存储用量统计：返回 { used, quota, pct }（字节），供设置页预警 */
 export function storageUsage() {
   try {
-    const key = dataKey();
-    const used = key ? new Blob([localStorage.getItem(key) || ""]).size : 0;
-    const quota = 5 * 1024 * 1024; // 约 5MB
-    return { used, quota, pct: quota ? Math.round((used / quota) * 1000) / 10 : 0 };
+    // 从内存数据计算使用量（IndexedDB 持久化，内存为缓存）
+    const used = _data ? new Blob([JSON.stringify(_data)]).size : 0;
+    // IndexedDB 配额通常很大（可用磁盘空间的一定比例），这里默认按 5GB 显示
+    // 真实配额通过 getStorageInfo() 异步获取并在页面上更新
+    const quota = 5 * 1024 * 1024 * 1024; // 5GB
+    return { used, quota, pct: quota ? Math.round((used / quota) * 10000) / 100 : 0 };
   } catch (e) {
     return { used: 0, quota: 0, pct: 0 };
   }
@@ -956,6 +1064,3 @@ export function clearPomodoros() {
   _data.pomodoros = [];
   save();
 }
-
-// 初始化加载
-load();
