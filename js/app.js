@@ -350,7 +350,18 @@ export function switchView(name) {
 
 function refreshCurrent() {
   const c = document.getElementById("view-" + currentView);
-  if (c) VIEWS[currentView].render(c);
+  if (!c) return;
+  const containerScroll = c.scrollTop;
+  const windowScroll = window.scrollY;
+  const listWrap = c.querySelector("#kListWrap, .item-list, .kb-note-list-wrap");
+  const listScroll = listWrap ? listWrap.scrollTop : 0;
+  VIEWS[currentView].render(c);
+  setTimeout(() => {
+    c.scrollTop = containerScroll;
+    window.scrollTo({ top: windowScroll, behavior: "auto" });
+    const newListWrap = c.querySelector("#kListWrap, .item-list, .kb-note-list-wrap");
+    if (newListWrap) newListWrap.scrollTop = listScroll;
+  }, 0);
 }
 
 /* ---------- 仪表盘 ---------- */
