@@ -1292,6 +1292,60 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
   font-weight: 500;
 }
 .kb-note-card-time { margin-left: auto; }
+.kb-note-card-subj {
+  padding: 2px 6px;
+  background: rgba(30,122,92,0.1);
+  color: var(--ok);
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 11px;
+}
+
+/* 科目筛选区（分类筛选下方，用不同底色区分） */
+.kb-subject-filter {
+  border-bottom: none;
+  background: rgba(30,122,92,0.05);
+  max-height: 60px;
+}
+.kb-subj-tag.active {
+  background: var(--ok);
+  color: #f5efe0;
+  border-color: var(--ok);
+}
+
+/* 编辑器内科目多选选择器 */
+.kb-subj-picker {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.kb-subj-label {
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-right: 2px;
+}
+.kb-subj-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: all .16s ease;
+}
+.kb-subj-chip input { display: none; }
+.kb-subj-chip:hover { border-color: var(--ok); color: var(--ok); }
+.kb-subj-chip.on {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #f5efe0;
+}
 
 .kb-sidebar-footer {
   padding: 10px 16px;

@@ -7,7 +7,7 @@ import { getSessionUserId, userKey } from "./auth.js";
 
 const LEGACY_KEY = "kaoyan_study_data";
 const DB_NAME = "kaoyan_study_db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "user_data";
 
 /* ---------- IndexedDB 辅助 ---------- */
@@ -19,6 +19,7 @@ function openDB() {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => {
       const db = e.target.result;
+      // 修复：早期版本可能创建了无 store 的空数据库，升级时补建
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: "userId" });
       }
@@ -725,6 +726,8 @@ export function addKbNode(raw) {
     type: raw.type === "folder" ? "folder" : "note",
     parentId,
     content: raw.content || "",
+    category: raw.category || null,
+    subjects: Array.isArray(raw.subjects) ? raw.subjects.filter(Boolean) : [],
     sort: sibs.length ? Math.max(...sibs.map((x) => x.sort || 0)) + 1 : 0,
     createdAt: now,
     updatedAt: now,
@@ -739,6 +742,8 @@ export function updateKbNode(id, patch) {
   if (patch.title != null) n.title = (patch.title || "").trim() || n.title;
   if (patch.content != null) n.content = patch.content;
   if (patch.parentId !== undefined) n.parentId = patch.parentId || null;
+  if (patch.category !== undefined) n.category = patch.category || null;
+  if (patch.subjects !== undefined) n.subjects = Array.isArray(patch.subjects) ? patch.subjects.filter(Boolean) : [];
   if (patch.sort != null) n.sort = patch.sort;
   n.updatedAt = Date.now();
   save();

@@ -12,6 +12,7 @@ const state = {
   q: "",
   viewMode: "preview",  // split | edit | preview
   categoryFilter: "all", // all | 分类名
+  subjectFilter: "all", // all | 科目名
 };
 
 let saveTimer = null;
@@ -261,6 +262,13 @@ function getAllCategories() {
   return Array.from(cats).sort();
 }
 
+/* 获取所有科目标签（从系统科目列表 + 笔记 subjects 字段提取） */
+function getAllSubjects() {
+  const subs = new Set(store.getData().subjects || []);
+  getAllNotes().forEach(n => { (n.subjects || []).forEach(s => { if (s) subs.add(s); }); });
+  return Array.from(subs).sort();
+}
+
 /* ---------- 主渲染 ---------- */
 export function renderKnowledgeBase(container) {
   const notes = getAllNotes();
@@ -279,6 +287,9 @@ export function renderKnowledgeBase(container) {
         </div>
         <div class="kb-category-filter" id="kbCategoryFilter">
           ${renderCategoryFilter()}
+        </div>
+        <div class="kb-category-filter kb-subject-filter" id="kbSubjectFilter">
+          ${renderSubjectFilter()}
         </div>
         <div class="kb-note-list" id="kbNoteList">
           ${renderNoteList(notes)}
@@ -309,12 +320,36 @@ function renderCategoryFilter() {
   return html;
 }
 
+/* ---------- 科目筛选 ---------- */
+function renderSubjectFilter() {
+  const subs = getAllSubjects();
+  let html = `<button class="kb-cat-tag kb-subj-tag ${state.subjectFilter === 'all' ? 'active' : ''}" data-subj="all">📚 全部</button>`;
+  subs.forEach(sub => {
+    html += `<button class="kb-cat-tag kb-subj-tag ${state.subjectFilter === sub ? 'active' : ''}" data-subj="${esc(sub)}">${esc(sub)}</button>`;
+  });
+  return html;
+}
+/* ---------- 科目多选选择器（编辑器内） ---------- */
+function renderSubjectPicker(note) {
+  const subs = getAllSubjects();
+  const selected = new Set(note.subjects || []);
+  if (!subs.length) return `<span class="muted" style="font-size:12px">科目：暂无</span>`;
+  return `<span class="kb-subj-label">科目</span>` + subs.map(s => `
+    <label class="kb-subj-chip ${selected.has(s) ? 'on' : ''}" data-subj="${esc(s)}">
+      <input type="checkbox" ${selected.has(s) ? 'checked' : ''} value="${esc(s)}" />${esc(s)}
+    </label>
+  `).join("");
+}
+
 /* ---------- 笔记列表 ---------- */
 function renderNoteList(notes) {
   // 筛选
   let filtered = notes;
   if (state.categoryFilter !== "all") {
     filtered = filtered.filter(n => n.category === state.categoryFilter);
+  }
+  if (state.subjectFilter !== "all") {
+    filtered = filtered.filter(n => (n.subjects || []).includes(state.subjectFilter));
   }
   if (state.q) {
     const q = state.q.toLowerCase();
@@ -342,6 +377,7 @@ function renderNoteList(notes) {
       <p class="kb-note-card-summary">${esc(extractSummary(n.content))}</p>
       <div class="kb-note-card-meta">
         ${n.category ? `<span class="kb-note-card-cat">${esc(n.category)}</span>` : ""}
+        ${(n.subjects || []).map(s => `<span class="kb-note-card-subj">${esc(s)}</span>`).join("")}
         <span class="kb-note-card-time">${fmtTime(n.updatedAt)}</span>
       </div>
     </div>
@@ -367,6 +403,9 @@ function renderEditor(note) {
         <div class="kb-editor-actions">
           <input class="kb-cat-input" id="kbCategory" type="text" placeholder="分类（可选）" value="${esc(note.category || "")}" list="kbCatList" />
           <datalist id="kbCatList">${getAllCategories().map(c => `<option value="${esc(c)}">`).join("")}</datalist>
+          <div class="kb-subj-picker" id="kbSubjectPicker" title="选择笔记关联的科目（可多选）">
+            ${renderSubjectPicker(note)}
+          </div>
           <button class="btn btn-primary btn-sm" id="kbSaveBtn" type="button">💾 保存</button>
         </div>
       </div>
@@ -459,6 +498,19 @@ function bindEvents(container) {
       if (!tag) return;
       state.categoryFilter = tag.dataset.cat;
       catFilter.innerHTML = renderCategoryFilter();
+      const list = container.querySelector("#kbNoteList");
+      if (list) list.innerHTML = renderNoteList(getAllNotes());
+    };
+  }
+
+  // 科目筛选
+  const subjFilter = container.querySelector("#kbSubjectFilter");
+  if (subjFilter) {
+    subjFilter.onclick = (e) => {
+      const tag = e.target.closest("[data-subj]");
+      if (!tag) return;
+      state.subjectFilter = tag.dataset.subj;
+      subjFilter.innerHTML = renderSubjectFilter();
       const list = container.querySelector("#kbNoteList");
       if (list) list.innerHTML = renderNoteList(getAllNotes());
     };
@@ -566,7 +618,8 @@ function bindEditorEvents(editor, container) {
     if ((ev.ctrlKey || ev.metaKey) && ev.key === "s") {
       ev.preventDefault();
       clearTimeout(saveTimer);
-      store.updateKbNode(note.id, { content: ta.value, title: titleInput?.value });
+      const subjS = Array.from(editor.querySelectorAll("#kbSubjectPicker input:checked")).map(i => i.value);
+      store.updateKbNode(note.id, { content: ta.value, title: titleInput?.value, subjects: subjS });
       markSaved("已保存 · " + new Date().toLocaleTimeString());
       toast("已保存", "ok");
       return;
@@ -662,12 +715,36 @@ function bindEditorEvents(editor, container) {
     });
   }
 
+  // 科目多选（点击 chip 切换，实时保存）
+  const subjPicker = editor.querySelector("#kbSubjectPicker");
+  if (subjPicker) {
+    subjPicker.onclick = (e) => {
+      const chip = e.target.closest("[data-subj]");
+      if (!chip || !chip.classList.contains("kb-subj-chip")) return;
+      const cb = chip.querySelector("input[type=checkbox]");
+      if (!cb) return;
+      cb.checked = !cb.checked;
+      chip.classList.toggle("on", cb.checked);
+      // 收集当前选中的科目并保存
+      const selected = Array.from(subjPicker.querySelectorAll("input:checked")).map(i => i.value);
+      store.updateKbNode(note.id, { subjects: selected });
+      markSaved();
+      // 更新左侧列表（科目标签与筛选）
+      const list = container.querySelector("#kbNoteList");
+      if (list) list.innerHTML = renderNoteList(getAllNotes());
+      const subjFilter = container.querySelector("#kbSubjectFilter");
+      if (subjFilter) subjFilter.innerHTML = renderSubjectFilter();
+      toast("科目已更新", "ok");
+    };
+  }
+
   // 手动保存
   const saveBtn = editor.querySelector("#kbSaveBtn");
   if (saveBtn) {
     saveBtn.onclick = () => {
       clearTimeout(saveTimer);
-      store.updateKbNode(note.id, { content: ta.value, title: titleInput?.value, category: catInput?.value.trim() || null });
+      const subjects = Array.from(editor.querySelectorAll("#kbSubjectPicker input:checked")).map(i => i.value);
+      store.updateKbNode(note.id, { content: ta.value, title: titleInput?.value, category: catInput?.value.trim() || null, subjects });
       markSaved();
       toast("已保存", "ok");
       const list = container.querySelector("#kbNoteList");
