@@ -21,7 +21,7 @@ export function renderPapers(container) {
     <div class="section-head">
       <div>
         <h2>刷题记录</h2>
-        <div class="hint">点击卡片可编辑 · 新增入口位于「仪表盘」</div>
+        <div class="hint">点击行可编辑 · 新增入口位于「仪表盘」</div>
       </div>
     </div>
 
@@ -119,40 +119,38 @@ function rerenderList(container) {
     return;
   }
 
-  wrap.innerHTML = `<div class="paper-grid">${list.map(cardHTML).join("")}</div>`;
+  wrap.innerHTML = `<div class="paper-list">${list.map(rowHTML).join("")}</div>`;
 
   // 绑定步进 / 编辑 / 删除
   list.forEach((p) => bindCard(wrap, p));
 }
 
-function cardHTML(p) {
+function rowHTML(p) {
   const tier = store.getTier(p);
   const total = store.num(p.totalScore, 100);
   const score = store.num(p.score);
   return `
-    <div class="paper-card" data-id="${p.id}" title="点击编辑">
-      <div class="paper-card-main">
-        <div class="paper-card-info">
-          <div class="paper-name" title="${esc(p.name)}">${esc(p.name)}</div>
-          ${p.note ? `<div class="paper-note">${esc(p.note)}</div>` : ""}
-          <div class="paper-meta">
-            <span class="tag tag-ink">${esc(p.subject)}</span>
-            <span class="tag">${esc(p.type)}</span>
-            <span class="paper-date">${store.formatDate(p.date)}</span>
-          </div>
+    <div class="paper-row" data-id="${p.id}" title="点击编辑">
+      <div class="paper-row-info">
+        <div class="paper-row-name" title="${esc(p.name)}">${esc(p.name)}</div>
+        ${p.note ? `<div class="paper-row-note">${esc(p.note)}</div>` : ""}
+        <div class="paper-row-meta">
+          <span class="tag tag-ink">${esc(p.subject)}</span>
+          <span class="tag">${esc(p.type)}</span>
+          <span class="paper-date">${store.formatDate(p.date)}</span>
         </div>
-        <div class="paper-card-right">
-          <div class="paper-score-compact">
-            <span class="score-num">${score}</span><span class="score-total">/${total}</span>
-          </div>
-          <span class="tier tier-${tier.key}"><span class="dot-sm"></span>${tier.label} ${tier.pct}%</span>
+      </div>
+      <div class="paper-row-right">
+        <div class="paper-row-score">
+          <span class="score-num">${score}</span><span class="score-total">/${total}</span>
         </div>
+        <span class="tier tier-${tier.key}"><span class="dot-sm"></span>${tier.label} ${tier.pct}%</span>
       </div>
     </div>`;
 }
 
 function bindCard(wrap, p) {
-  const card = wrap.querySelector(`.paper-card[data-id="${p.id}"]`);
+  const card = wrap.querySelector(`.paper-row[data-id="${p.id}"]`);
   if (!card) return;
   card.onclick = () => openPaperForm(store.getData().papers.find((x) => x.id === p.id));
 }

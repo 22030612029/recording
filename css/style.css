@@ -2507,14 +2507,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 }
 
 /* ============================================================
-   刷题记录：简约统计 + 纯展示卡片
+   刷题记录：简约统计 + 横向列表行
    ============================================================ */
 .paper-summary {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   font-size: 13px;
   color: var(--ink-soft);
 }
@@ -2530,49 +2530,39 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   font-size: 12px;
 }
 
-.paper-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 10px;
-}
-.paper-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: 12px 14px;
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-  transition: box-shadow .16s ease, border-color .16s ease, transform .16s ease;
-}
-.paper-card:hover {
-  box-shadow: var(--shadow);
-  border-color: var(--accent-soft);
-  transform: translateY(-1px);
-}
-.paper-card-main {
+.paper-list {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
 }
-.paper-card-info { flex: 1; min-width: 0; }
-.paper-name {
+.paper-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 6px;
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+  transition: background .14s ease;
+}
+.paper-row:hover { background: var(--surface-2); }
+.paper-row-info { flex: 1; min-width: 0; }
+.paper-row-name {
   font-weight: 600;
   font-size: 14.5px;
   color: var(--ink);
-  line-height: 1.35;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
-.paper-note {
+.paper-row-note {
   font-size: 12px;
   color: var(--ink-soft);
-  margin-top: 3px;
+  margin-top: 2px;
 }
-.paper-meta {
+.paper-row-meta {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-top: 7px;
+  margin-top: 5px;
   flex-wrap: wrap;
 }
 .paper-date {
@@ -2580,24 +2570,23 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   color: var(--ink-mute);
   font-family: var(--ff-mono);
 }
-.paper-card-right {
+.paper-row-right {
   flex-shrink: 0;
-  text-align: right;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 5px;
+  align-items: center;
+  gap: 14px;
 }
-.paper-score-compact {
+.paper-row-score {
   font-family: var(--ff-mono);
   line-height: 1;
+  text-align: right;
 }
-.paper-score-compact .score-num {
-  font-size: 22px;
+.paper-row-score .score-num {
+  font-size: 20px;
   font-weight: 700;
   color: var(--ink);
 }
-.paper-score-compact .score-total {
+.paper-row-score .score-total {
   font-size: 13px;
   color: var(--ink-mute);
 }
