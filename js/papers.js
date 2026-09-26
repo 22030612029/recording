@@ -63,40 +63,29 @@ export function renderPapers(container) {
   rerenderList(container);
 }
 
-/* ---------- 顶部统计概览 ---------- */
+/* ---------- 顶部统计（一行文字） ---------- */
 function statsHTML(papers) {
   if (!papers.length) return "";
   const n = papers.length;
   const avg = Math.round((papers.reduce((s, p) => s + store.scorePercent(p), 0) / n) * 10) / 10;
-  let bestPct = -1, bestName = "—";
+  let bestPct = -1;
   const tiers = { excellent: 0, good: 0, pass: 0, fail: 0 };
   const tLabels = { excellent: "优秀", good: "良好", pass: "及格", fail: "待提升" };
   papers.forEach((p) => {
     const pct = store.scorePercent(p);
-    if (pct > bestPct) { bestPct = pct; bestName = p.name; }
+    if (pct > bestPct) bestPct = pct;
     tiers[store.getTier(p).key]++;
   });
+  const tierStr = ["excellent", "good", "pass", "fail"]
+    .map((k) => (tiers[k] ? `${tLabels[k]} ${tiers[k]}` : ""))
+    .filter(Boolean)
+    .join(" · ");
   return `
-    <div class="stat-card">
-      <div class="stat-label">试卷总数</div>
-      <div class="stat-num">${n}</div>
-      <div class="stat-sub">张试卷</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">平均得分率</div>
-      <div class="stat-num">${avg}%</div>
-      <div class="stat-sub">全部试卷均值</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">最高得分率</div>
-      <div class="stat-num">${bestPct}%</div>
-      <div class="stat-sub" title="${esc(bestName)}">${esc(bestName)}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">评级分布</div>
-      <div class="stat-tiers">
-        ${["excellent", "good", "pass", "fail"].map((k) => tiers[k] ? `<span class="tier tier-${k}"><span class="dot-sm"></span>${tLabels[k]} ${tiers[k]}</span>` : "").join("")}
-      </div>
+    <div class="paper-summary">
+      <span>共 <strong>${n}</strong> 张</span>
+      <span>平均 <strong>${avg}%</strong></span>
+      <span>最高 <strong>${bestPct}%</strong></span>
+      <span class="paper-summary-tiers">${tierStr}</span>
     </div>
   `;
 }
@@ -142,29 +131,31 @@ function cardHTML(p) {
   const score = store.num(p.score);
   return `
     <div class="paper-card" data-id="${p.id}">
-      <div class="paper-card-top">
-        <div class="paper-name" title="${esc(p.name)}">${esc(p.name)}</div>
-        <span class="tier tier-${tier.key}"><span class="dot-sm"></span>${tier.label} ${tier.pct}%</span>
+      <div class="paper-card-main">
+        <div class="paper-card-info">
+          <div class="paper-name" title="${esc(p.name)}">${esc(p.name)}</div>
+          ${p.note ? `<div class="paper-note">${esc(p.note)}</div>` : ""}
+          <div class="paper-meta">
+            <span class="tag tag-ink">${esc(p.subject)}</span>
+            <span class="tag">${esc(p.type)}</span>
+            <span class="paper-date">${store.formatDate(p.date)}</span>
+          </div>
+        </div>
+        <div class="paper-card-right">
+          <div class="paper-score-compact">
+            <span class="score-num">${score}</span><span class="score-total">/${total}</span>
+          </div>
+          <span class="tier tier-${tier.key}"><span class="dot-sm"></span>${tier.label} ${tier.pct}%</span>
+        </div>
       </div>
-      ${p.note ? `<div class="paper-note">${esc(p.note)}</div>` : ""}
-      <div class="paper-meta">
-        <span class="tag tag-ink">${esc(p.subject)}</span>
-        <span class="tag">${esc(p.type)}</span>
-        <span class="paper-date">${store.formatDate(p.date)}</span>
-      </div>
-      <div class="paper-score-row">
-        <div class="paper-score"><span class="score-num">${score}</span><span class="score-total"> / ${total}</span></div>
-      </div>
-      <div class="paper-actions">
+      <div class="paper-card-foot">
         <div class="score-stepper">
-          <button class="btn-step minus" data-act="-5" aria-label="-5">−5</button>
           <button class="btn-step minus" data-act="-1" aria-label="-1">−1</button>
           <button class="btn-step plus" data-act="1" aria-label="+1">+1</button>
-          <button class="btn-step plus" data-act="5" aria-label="+5">+5</button>
         </div>
         <div class="paper-ops">
-          <button class="btn btn-ghost btn-sm" data-edit>✎ 编辑</button>
-          <button class="btn btn-danger btn-sm" data-del>✕ 删除</button>
+          <button class="icon-btn" data-edit title="编辑">✎</button>
+          <button class="icon-btn" data-del title="删除">✕</button>
         </div>
       </div>
     </div>`;
