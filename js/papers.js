@@ -21,11 +21,11 @@ export function renderPapers(container) {
     <div class="section-head">
       <div>
         <h2>刷题记录</h2>
-        <div class="hint">点击分数步进即时调整 · 新增入口位于「仪表盘」</div>
+        <div class="hint">点击卡片可编辑 · 新增入口位于「仪表盘」</div>
       </div>
     </div>
 
-    <div class="paper-stats">${statsHTML(papers)}</div>
+    <div class="paper-summary-wrap">${statsHTML(papers)}</div>
 
     <div class="toolbar">
       <div class="filters">
@@ -130,7 +130,7 @@ function cardHTML(p) {
   const total = store.num(p.totalScore, 100);
   const score = store.num(p.score);
   return `
-    <div class="paper-card" data-id="${p.id}">
+    <div class="paper-card" data-id="${p.id}" title="点击编辑">
       <div class="paper-card-main">
         <div class="paper-card-info">
           <div class="paper-name" title="${esc(p.name)}">${esc(p.name)}</div>
@@ -148,37 +148,13 @@ function cardHTML(p) {
           <span class="tier tier-${tier.key}"><span class="dot-sm"></span>${tier.label} ${tier.pct}%</span>
         </div>
       </div>
-      <div class="paper-card-foot">
-        <div class="score-stepper">
-          <button class="btn-step minus" data-act="-1" aria-label="-1">−1</button>
-          <button class="btn-step plus" data-act="1" aria-label="+1">+1</button>
-        </div>
-        <div class="paper-ops">
-          <button class="icon-btn" data-edit title="编辑">✎</button>
-          <button class="icon-btn" data-del title="删除">✕</button>
-        </div>
-      </div>
     </div>`;
 }
 
 function bindCard(wrap, p) {
   const card = wrap.querySelector(`.paper-card[data-id="${p.id}"]`);
   if (!card) return;
-  card.querySelectorAll(".btn-step").forEach((btn) => {
-    btn.onclick = () => {
-      const d = parseInt(btn.dataset.act, 10);
-      const np = store.adjustScore(p.id, d);
-      toast(`${d > 0 ? "+" : ""}${d} → ${store.num(np?.score)}分`, "ok");
-    };
-  });
-  card.querySelector("[data-edit]").onclick = () => openPaperForm(store.getData().papers.find((x) => x.id === p.id));
-  card.querySelector("[data-del]").onclick = async () => {
-    const ok = await confirmBox("删除试卷", `确认删除「${esc(p.name)}」？其关联错题与知识点也将一并删除。`);
-    if (ok) {
-      store.deletePaper(p.id);
-      toast("已删除", "ok");
-    }
-  };
+  card.onclick = () => openPaperForm(store.getData().papers.find((x) => x.id === p.id));
 }
 
 function emptyHTML(noData) {
@@ -234,6 +210,7 @@ export function openPaperForm(paper = null) {
       <div id="pf_tierPreview" style="margin-top:12px"></div>
     `,
     footer: `
+      ${isEdit ? `<button class="btn btn-danger" id="pf_del">删除</button>` : ""}
       <button class="btn btn-ghost" id="pf_cancel">取消</button>
       <button class="btn btn-primary" id="pf_save">${isEdit ? "保存修改" : "录入"}</button>
     `,
@@ -264,6 +241,17 @@ export function openPaperForm(paper = null) {
       });
 
       root.querySelector("#pf_cancel").onclick = () => closeModal();
+      const delBtn = root.querySelector("#pf_del");
+      if (delBtn) {
+        delBtn.onclick = async () => {
+          const ok = await confirmBox("删除试卷", `确认删除「${esc(p.name)}」？其关联错题与知识点也将一并删除。`);
+          if (ok) {
+            store.deletePaper(paper.id);
+            toast("已删除", "ok");
+            closeModal();
+          }
+        };
+      }
       root.querySelector("#pf_save").onclick = () => {
         const name = root.querySelector("#pf_name").value.trim();
         if (!name) { toast("请填写试卷名称", "err"); return; }

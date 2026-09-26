@@ -2507,7 +2507,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 }
 
 /* ============================================================
-   刷题记录：简约统计 + 紧凑卡片
+   刷题记录：简约统计 + 纯展示卡片
    ============================================================ */
 .paper-summary {
   display: flex;
@@ -2541,11 +2541,13 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   border-radius: var(--r-sm);
   padding: 12px 14px;
   box-shadow: var(--shadow-sm);
-  transition: box-shadow .16s ease, border-color .16s ease;
+  cursor: pointer;
+  transition: box-shadow .16s ease, border-color .16s ease, transform .16s ease;
 }
 .paper-card:hover {
   box-shadow: var(--shadow);
   border-color: var(--accent-soft);
+  transform: translateY(-1px);
 }
 .paper-card-main {
   display: flex;
@@ -2599,13 +2601,3 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   font-size: 13px;
   color: var(--ink-mute);
 }
-.paper-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 10px;
-  padding-top: 9px;
-  border-top: 1px solid var(--line-soft);
-}
-.paper-card-foot .score-stepper { display: flex; gap: 4px; }
-.paper-ops { display: flex; gap: 4px; }
