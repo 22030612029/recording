@@ -2505,3 +2505,134 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     font-size: 20px;
   }
 }
+
+/* ============================================================
+   刷题记录：统计概览 + 卡片式列表
+   ============================================================ */
+.paper-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+@media (max-width: 860px) {
+  .paper-stats { grid-template-columns: repeat(2, 1fr); }
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-sm);
+}
+.stat-label {
+  font-size: 11.5px;
+  color: var(--ink-mute);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.stat-num {
+  font-family: var(--ff-mono);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 3px 0 2px;
+  line-height: 1.1;
+}
+.stat-sub {
+  font-size: 11.5px;
+  color: var(--ink-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.stat-tiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  min-height: 26px;
+  align-items: center;
+}
+.stat-tiers .tier { font-size: 11px; padding: 2px 8px; }
+
+.paper-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 12px;
+}
+.paper-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease;
+}
+.paper-card:hover {
+  box-shadow: var(--shadow);
+  border-color: var(--accent-soft);
+  transform: translateY(-1px);
+}
+.paper-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.paper-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.paper-card-top .tier { flex-shrink: 0; }
+.paper-note {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin-top: 5px;
+}
+.paper-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+  flex-wrap: wrap;
+}
+.paper-date {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-mute);
+  font-family: var(--ff-mono);
+}
+.paper-score-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  margin: 11px 0 12px;
+  padding: 9px 0;
+  background: var(--surface-2);
+  border-radius: var(--r-xs);
+}
+.paper-score .score-num {
+  font-family: var(--ff-mono);
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1;
+}
+.paper-score .score-total {
+  font-size: 14px;
+  color: var(--ink-mute);
+  font-family: var(--ff-mono);
+}
+.paper-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.paper-actions .score-stepper { display: flex; gap: 4px; }
+.paper-ops { display: flex; gap: 6px; }

@@ -1,6 +1,6 @@
 /* ============================================================
  * papers.js — 刷题记录管理
- * 录入表单、列表、分数步进、区间色徽章、筛选排序
+ * 统计概览 + 卡片式列表、分数步进、区间色徽章、筛选排序
  * ============================================================ */
 import { openModal, closeModal, toast, esc, confirmBox } from "./app.js";
 import * as store from "./storage.js";
@@ -21,9 +21,11 @@ export function renderPapers(container) {
     <div class="section-head">
       <div>
         <h2>刷题记录</h2>
-        <div class="hint">共 ${papers.length} 张试卷 · 点击分数步进即时调整 · 新增入口位于「仪表盘」</div>
+        <div class="hint">点击分数步进即时调整 · 新增入口位于「仪表盘」</div>
       </div>
     </div>
+
+    <div class="paper-stats">${statsHTML(papers)}</div>
 
     <div class="toolbar">
       <div class="filters">
@@ -61,6 +63,44 @@ export function renderPapers(container) {
   rerenderList(container);
 }
 
+/* ---------- 顶部统计概览 ---------- */
+function statsHTML(papers) {
+  if (!papers.length) return "";
+  const n = papers.length;
+  const avg = Math.round((papers.reduce((s, p) => s + store.scorePercent(p), 0) / n) * 10) / 10;
+  let bestPct = -1, bestName = "—";
+  const tiers = { excellent: 0, good: 0, pass: 0, fail: 0 };
+  const tLabels = { excellent: "优秀", good: "良好", pass: "及格", fail: "待提升" };
+  papers.forEach((p) => {
+    const pct = store.scorePercent(p);
+    if (pct > bestPct) { bestPct = pct; bestName = p.name; }
+    tiers[store.getTier(p).key]++;
+  });
+  return `
+    <div class="stat-card">
+      <div class="stat-label">试卷总数</div>
+      <div class="stat-num">${n}</div>
+      <div class="stat-sub">张试卷</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">平均得分率</div>
+      <div class="stat-num">${avg}%</div>
+      <div class="stat-sub">全部试卷均值</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">最高得分率</div>
+      <div class="stat-num">${bestPct}%</div>
+      <div class="stat-sub" title="${esc(bestName)}">${esc(bestName)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">评级分布</div>
+      <div class="stat-tiers">
+        ${["excellent", "good", "pass", "fail"].map((k) => tiers[k] ? `<span class="tier tier-${k}"><span class="dot-sm"></span>${tLabels[k]} ${tiers[k]}</span>` : "").join("")}
+      </div>
+    </div>
+  `;
+}
+
 function rerenderList(container) {
   const wrap = container.querySelector("#paperListWrap");
   if (!wrap) return;
@@ -90,65 +130,58 @@ function rerenderList(container) {
     return;
   }
 
-  wrap.innerHTML = `
-    <div class="card" style="padding:0;overflow:hidden">
-      <div style="overflow-x:auto">
-      <table class="table">
-        <thead><tr>
-          <th>试卷</th><th>科目</th><th>类型</th><th>完成日期</th>
-          <th class="num">分数</th><th>评级</th><th>操作</th>
-        </tr></thead>
-        <tbody>
-          ${list.map(rowHTML).join("")}
-        </tbody>
-      </table>
-      </div>
-    </div>`;
+  wrap.innerHTML = `<div class="paper-grid">${list.map(cardHTML).join("")}</div>`;
 
   // 绑定步进 / 编辑 / 删除
-  list.forEach((p) => bindRow(wrap, p));
+  list.forEach((p) => bindCard(wrap, p));
 }
 
-function rowHTML(p) {
+function cardHTML(p) {
   const tier = store.getTier(p);
   const total = store.num(p.totalScore, 100);
+  const score = store.num(p.score);
   return `
-    <tr data-id="${p.id}">
-      <td data-label="试卷"><strong>${esc(p.name)}</strong>${p.note ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(p.note)}</div>` : ""}</td>
-      <td data-label="科目"><span class="tag tag-ink">${esc(p.subject)}</span></td>
-      <td data-label="类型"><span class="tag">${esc(p.type)}</span></td>
-      <td data-label="完成日期" class="muted">${store.formatDate(p.date)}</td>
-      <td data-label="分数" class="num">
+    <div class="paper-card" data-id="${p.id}">
+      <div class="paper-card-top">
+        <div class="paper-name" title="${esc(p.name)}">${esc(p.name)}</div>
+        <span class="tier tier-${tier.key}"><span class="dot-sm"></span>${tier.label} ${tier.pct}%</span>
+      </div>
+      ${p.note ? `<div class="paper-note">${esc(p.note)}</div>` : ""}
+      <div class="paper-meta">
+        <span class="tag tag-ink">${esc(p.subject)}</span>
+        <span class="tag">${esc(p.type)}</span>
+        <span class="paper-date">${store.formatDate(p.date)}</span>
+      </div>
+      <div class="paper-score-row">
+        <div class="paper-score"><span class="score-num">${score}</span><span class="score-total"> / ${total}</span></div>
+      </div>
+      <div class="paper-actions">
         <div class="score-stepper">
           <button class="btn-step minus" data-act="-5" aria-label="-5">−5</button>
           <button class="btn-step minus" data-act="-1" aria-label="-1">−1</button>
-          <span class="score-display"><span class="score-num">${store.num(p.score)}</span><span class="muted">/${total}</span></span>
           <button class="btn-step plus" data-act="1" aria-label="+1">+1</button>
           <button class="btn-step plus" data-act="5" aria-label="+5">+5</button>
         </div>
-      </td>
-      <td data-label="评级">
-        <span class="tier tier-${tier.key}"><span class="dot-sm"></span>${tier.label} ${tier.pct}%</span>
-      </td>
-      <td data-label="操作">
-        <button class="btn btn-ghost btn-sm" data-edit>编辑</button>
-        <button class="btn btn-danger btn-sm" data-del>删除</button>
-      </td>
-    </tr>`;
+        <div class="paper-ops">
+          <button class="btn btn-ghost btn-sm" data-edit>✎ 编辑</button>
+          <button class="btn btn-danger btn-sm" data-del>✕ 删除</button>
+        </div>
+      </div>
+    </div>`;
 }
 
-function bindRow(wrap, p) {
-  const row = wrap.querySelector(`tr[data-id="${p.id}"]`);
-  if (!row) return;
-  row.querySelectorAll(".btn-step").forEach((btn) => {
+function bindCard(wrap, p) {
+  const card = wrap.querySelector(`.paper-card[data-id="${p.id}"]`);
+  if (!card) return;
+  card.querySelectorAll(".btn-step").forEach((btn) => {
     btn.onclick = () => {
       const d = parseInt(btn.dataset.act, 10);
       const np = store.adjustScore(p.id, d);
       toast(`${d > 0 ? "+" : ""}${d} → ${store.num(np?.score)}分`, "ok");
     };
   });
-  row.querySelector("[data-edit]").onclick = () => openPaperForm(store.getData().papers.find((x) => x.id === p.id));
-  row.querySelector("[data-del]").onclick = async () => {
+  card.querySelector("[data-edit]").onclick = () => openPaperForm(store.getData().papers.find((x) => x.id === p.id));
+  card.querySelector("[data-del]").onclick = async () => {
     const ok = await confirmBox("删除试卷", `确认删除「${esc(p.name)}」？其关联错题与知识点也将一并删除。`);
     if (ok) {
       store.deletePaper(p.id);
