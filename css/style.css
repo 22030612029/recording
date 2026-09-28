@@ -2590,3 +2590,45 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   font-size: 13px;
   color: var(--ink-mute);
 }
+
+.paper-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 8px;
+}
+.paper-tag-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+.paper-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .14s ease;
+  user-select: none;
+}
+.paper-tag strong {
+  font-family: var(--ff-mono);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.paper-tag:hover {
+  border-color: var(--accent-soft);
+  color: var(--accent);
+}
+.paper-tag.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.paper-tag.active strong { color: #fff; }

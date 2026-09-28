@@ -25,7 +25,7 @@ export function renderPapers(container) {
       </div>
     </div>
 
-    <div class="paper-summary-wrap">${statsHTML(papers)}</div>
+    <div class="paper-summary-wrap">${statsHTML(papers)}${tagsHTML(papers, filterState)}</div>
 
     <div class="toolbar">
       <div class="filters">
@@ -51,8 +51,8 @@ export function renderPapers(container) {
   `;
 
   // 事件（新增入口仅在仪表盘）
-  container.querySelector("#fSubject").onchange = (e) => { filterState.subject = e.target.value; rerenderList(container); };
-  container.querySelector("#fType").onchange = (e) => { filterState.type = e.target.value; rerenderList(container); };
+  container.querySelector("#fSubject").onchange = (e) => { filterState.subject = e.target.value; refreshTags(container); rerenderList(container); };
+  container.querySelector("#fType").onchange = (e) => { filterState.type = e.target.value; refreshTags(container); rerenderList(container); };
   container.querySelector("#fSort").onchange = (e) => { filterState.sort = e.target.value; rerenderList(container); };
   container.querySelector("#fQ").oninput = (e) => {
     filterState.q = e.target.value;
@@ -60,6 +60,7 @@ export function renderPapers(container) {
     qTimer = setTimeout(() => rerenderList(container), 250); // 防抖
   };
 
+  bindTagEvents(container);
   rerenderList(container);
 }
 
@@ -88,6 +89,64 @@ function statsHTML(papers) {
       <span class="paper-summary-tiers">${tierStr}</span>
     </div>
   `;
+}
+
+/* ---------- 科目/类型数量标签（可点击筛选） ---------- */
+function tagsHTML(papers, fs) {
+  if (!papers.length) return "";
+  const subjCounts = {};
+  const typeCounts = {};
+  papers.forEach((p) => {
+    subjCounts[p.subject] = (subjCounts[p.subject] || 0) + 1;
+    typeCounts[p.type] = (typeCounts[p.type] || 0) + 1;
+  });
+  const subjTags = Object.keys(subjCounts).sort().map((s) =>
+    `<span class="paper-tag ${fs.subject === s ? "active" : ""}" data-tag-subject="${esc(s)}">${esc(s)} <strong>${subjCounts[s]}</strong></span>`
+  ).join("");
+  const typeTags = Object.keys(typeCounts).sort().map((t) =>
+    `<span class="paper-tag ${fs.type === t ? "active" : ""}" data-tag-type="${esc(t)}">${esc(t)} <strong>${typeCounts[t]}</strong></span>`
+  ).join("");
+  return `
+    <div class="paper-tags">
+      <span class="paper-tag-group">
+        <span class="paper-tag ${!fs.subject ? "active" : ""}" data-tag-subject="">全部 <strong>${papers.length}</strong></span>
+        ${subjTags}
+      </span>
+      <span class="paper-tag-group">
+        <span class="paper-tag ${!fs.type ? "active" : ""}" data-tag-type="">全部 <strong>${papers.length}</strong></span>
+        ${typeTags}
+      </span>
+    </div>
+  `;
+}
+
+function refreshTags(container) {
+  const wrap = container.querySelector(".paper-summary-wrap");
+  if (!wrap) return;
+  const papers = store.getData().papers;
+  wrap.innerHTML = statsHTML(papers) + tagsHTML(papers, filterState);
+  bindTagEvents(container);
+}
+
+function bindTagEvents(container) {
+  container.querySelectorAll("[data-tag-subject]").forEach((el) => {
+    el.onclick = () => {
+      filterState.subject = el.dataset.tagSubject;
+      const sel = container.querySelector("#fSubject");
+      if (sel) sel.value = filterState.subject;
+      refreshTags(container);
+      rerenderList(container);
+    };
+  });
+  container.querySelectorAll("[data-tag-type]").forEach((el) => {
+    el.onclick = () => {
+      filterState.type = el.dataset.tagType;
+      const sel = container.querySelector("#fType");
+      if (sel) sel.value = filterState.type;
+      refreshTags(container);
+      rerenderList(container);
+    };
+  });
 }
 
 function rerenderList(container) {
